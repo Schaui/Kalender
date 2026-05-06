@@ -9,6 +9,7 @@ import requests
 # --- KONFIGURATION ---
 st.set_page_config(page_title="Team Kalender Pro", layout="wide")
 
+# CSS für Stabilität und Layout
 st.markdown("""
     <style>
     [data-testid="column"] {
@@ -26,14 +27,13 @@ URL = "https://docs.google.com/spreadsheets/d/1pk6k10OKOEeR7JPfOm6AjRiccLTx6Fnh0
 # Verbindung aufbauen
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Konstanten für deutsche Anzeige
+# Konstanten
 MONATS_NAMEN = [
     "Januar", "Februar", "März", "April", "Mai", "Juni",
     "Juli", "August", "September", "Oktober", "November", "Dezember"
 ]
 WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 
-# Mapping Bundesländer Namen zu Kürzeln
 BUNDESLAENDER_MAP = {
     "Baden-Württemberg": "BW",
     "Bayern": "BY",
@@ -82,7 +82,6 @@ except:
 st.sidebar.title("⚙️ Einstellungen")
 view_mode = st.sidebar.radio("Ansicht:", ["Monat", "Woche", "Jahr", "Liste"])
 
-# Dynamische Jahr- und Monatswahl
 selected_year = st.sidebar.number_input("Jahr wählen:", min_value=2024, max_value=2030, value=date.today().year)
 
 if view_mode == "Monat":
@@ -95,11 +94,10 @@ if view_mode == "Monat":
 else:
     selected_month = date.today().month
 
-# Bundesland Auswahl voll ausgeschrieben
 land_voller_name = st.sidebar.selectbox(
     "Bundesland (Ferien & Feiertage):", 
     options=list(BUNDESLAENDER_MAP.keys()), 
-    index=14 # Schleswig-Holstein
+    index=14
 )
 land = BUNDESLAENDER_MAP[land_voller_name]
 
@@ -175,33 +173,40 @@ ferien_daten = get_ferien(land, selected_year)
 def render_day_content(d_obj, compact=False):
     h_name = de_hols.get(d_obj)
     if only_national and d_obj not in national_hols: h_name = None
+    
     is_ferien = False
-    f_name = ""
+    f_display_name = ""
     if show_ferien:
         for f in ferien_daten:
             f_start = datetime.strptime(f["start"].split("T")[0], "%Y-%m-%d").date()
             f_end = datetime.strptime(f["end"].split("T")[0], "%Y-%m-%d").date()
             if f_start <= d_obj <= f_end:
                 is_ferien = True
-                f_name = f["name"]
+                f_display_name = f["name"].split(" 20")[0] 
                 break
+    
     u_events = df_events[df_events["date"] == str(d_obj)]
     is_today = (d_obj == date.today())
-    bg = "#3d3d3d" if is_today else "transparent"
-    f_bg = "rgba(241, 196, 15, 0.1)" if is_ferien else "transparent"
+    bg_color = "#3d3d3d" if is_today else "transparent"
+    ferien_overlay = "rgba(241, 196, 15, 0.25)" if is_ferien else "transparent"
+    
     if compact:
         dot_color = "transparent"
         if h_name: dot_color = "#e74c3c"
         elif not u_events.empty:
             dot_color = df_users[df_users["name"] == u_events.iloc[0]["user"]]["color"].values[0] if not df_users.empty else "#3498db"
         dot_html = f"<div style='height:4px; width:4px; background:{dot_color}; border-radius:50%; margin: 0 auto;'></div>" if dot_color != "transparent" else ""
-        return f"<div style='text-align:center; background:{f_bg}; font-size:10px; border-radius:2px;'>{d_obj.day}{dot_html}</div>"
-    html = f"<div style='border:1px solid #555; background-color:{bg}; background-image: linear-gradient({f_bg}, {f_bg}); padding:5px; min-height:90px; border-radius:5px;'>"
-    html += f"<b style='font-size:14px;'>{d_obj.day}</b>"
+        return f"<div style='text-align:center; background:{ferien_overlay}; font-size:10px; border-radius:2px;'>{d_obj.day}{dot_html}</div>"
+    
+    html = f"""
+    <div style='border:1px solid #555; background-color:{bg_color}; background-image: linear-gradient({ferien_overlay}, {ferien_overlay}); padding:5px; min-height:90px; border-radius:5px;'>
+        <div style='display: flex; justify-content: flex-start; align-items: baseline; gap: 8px;'>
+            <b style='font-size:14px;'>{d_obj.day}</b>
+            <span style='color: black; font-size: 9px; font-weight: bold;'>{f_display_name}</span>
+        </div>
+    """
     if h_name:
-        html += f"<div style='background:#e74c3c; color:white; padding:2px; font-size:9px; border-radius:3px; margin-bottom:2px;'>{h_name}</div>"
-    if is_ferien and not h_name:
-        html += f"<div style='color:#f1c40f; font-size:8px; font-style:italic;'>{f_name}</div>"
+        html += f"<div style='background:#e74c3c; color:white; padding:2px; font-size:9px; border-radius:3px; margin-top:2px;'>{h_name}</div>"
     for _, row in u_events.iterrows():
         u_color = df_users[df_users["name"] == row["user"]]["color"].values[0] if row["user"] in df_users["name"].values else "#333"
         html += f"<div style='background:{u_color}; color:white; padding:2px; margin-top:2px; font-size:10px; border-radius:3px;'>{row['title']}</div>"
