@@ -46,7 +46,7 @@ except:
 
 # --- SIDEBAR ---
 st.sidebar.title("⚙️ Steuerung")
-view_mode = st.sidebar.radio("Ansicht:", ["Monat", "Woche", "Liste"])
+view_mode = st.sidebar.radio("Ansicht:", ["Monat", "Woche", "Jahr", "Liste"])
 
 land = st.sidebar.selectbox("Bundesland für Feiertage & Ferien:", 
                             ["BW", "BY", "BE", "BB", "HB", "HH", "HE", "MV", 
@@ -54,6 +54,11 @@ land = st.sidebar.selectbox("Bundesland für Feiertage & Ferien:",
 
 only_national = st.sidebar.checkbox("Nur bundeseinheitliche Feiertage")
 show_ferien = st.sidebar.checkbox("Ferien anzeigen", value=True)
+
+# Navigation für Monat (falls Modus "Monat")
+selected_month = date.today().month
+if view_mode == "Monat":
+    selected_month = st.sidebar.slider("Monat wählen:", 1, 12, date.today().month)
 
 # --- USER MANAGEMENT IN SIDEBAR ---
 with st.sidebar.expander("👤 User anlegen"):
@@ -130,13 +135,11 @@ de_hols = holidays.Germany(subdiv=land, years=year)
 national_hols = holidays.Germany(years=year)
 ferien_daten = get_ferien(land, year)
 
-def render_day_content(d_obj):
-    # Feiertage
+def render_day_content(d_obj, compact=False):
     h_name = de_hols.get(d_obj)
     if only_national and d_obj not in national_hols:
         h_name = None
         
-    # Ferien Check
     is_ferien = False
     f_name = ""
     if show_ferien:
@@ -148,35 +151,40 @@ def render_day_content(d_obj):
                 f_name = f["name"]
                 break
 
-    # Termine
     u_events = df_events[df_events["date"] == str(d_obj)]
+    is_today = (d_obj == date.today())
     
     # Styling
-    is_today = (d_obj == date.today())
     bg = "#3d3d3d" if is_today else "transparent"
-    ferien_border = "border: 2px solid rgba(241, 196, 15, 0.4);" if is_ferien else "border: 1px solid #555;"
-    ferien_bg = "background-color: rgba(241, 196, 15, 0.05);" if is_ferien else ""
-    
-    html = f"<div style='{ferien_border} {ferien_bg} padding:5px; min-height:90px; background-color:{bg}; border-radius:5px;'>"
+    f_bg = "rgba(241, 196, 15, 0.1)" if is_ferien else "transparent"
+    border = "1px solid #555"
+    if compact:
+        # Mini-Logik für Jahresansicht
+        dot_color = "transparent"
+        if h_name: dot_color = "#e74c3c"
+        elif not u_events.empty:
+            dot_color = df_users[df_users["name"] == u_events.iloc[0]["user"]]["color"].values[0] if not df_users.empty else "#3498db"
+        
+        dot_html = f"<div style='height:4px; width:4px; background:{dot_color}; border-radius:50%; margin: 0 auto;'></div>" if dot_color != "transparent" else ""
+        return f"<div style='text-align:center; background:{f_bg}; font-size:10px; border-radius:2px;'>{d_obj.day}{dot_html}</div>"
+
+    # Standard Box
+    html = f"<div style='border:{border}; background-color:{bg}; background-image: linear-gradient({f_bg}, {f_bg}); padding:5px; min-height:90px; border-radius:5px;'>"
     html += f"<b style='font-size:14px;'>{d_obj.day}</b>"
-    
     if h_name:
         html += f"<div style='background:#e74c3c; color:white; padding:2px; font-size:9px; border-radius:3px; margin-bottom:2px;'>{h_name}</div>"
-    
     if is_ferien and not h_name:
         html += f"<div style='color:#f1c40f; font-size:8px; font-style:italic;'>{f_name}</div>"
-
     for _, row in u_events.iterrows():
         u_color = df_users[df_users["name"] == row["user"]]["color"].values[0] if row["user"] in df_users["name"].values else "#333"
         html += f"<div style='background:{u_color}; color:white; padding:2px; margin-top:2px; font-size:10px; border-radius:3px;'>{row['title']}</div>"
-    
     html += "</div>"
     return html
 
 # --- ANSICHTEN RENDERN ---
 if view_mode == "Monat":
-    curr_month = date.today().month # Kann man später noch dynamisch machen
-    month_days = calendar.monthcalendar(year, curr_month)
+    st.subheader(f"{calendar.month_name[selected_month]} {year}")
+    month_days = calendar.monthcalendar(year, selected_month)
     cols = st.columns(7)
     for i, d in enumerate(["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]):
         cols[i].write(f"**{d}**")
@@ -185,19 +193,33 @@ if view_mode == "Monat":
         for i, day in enumerate(week):
             if day != 0:
                 with cols[i]:
-                    st.markdown(render_day_content(date(year, curr_month, day)), unsafe_allow_html=True)
+                    st.markdown(render_day_content(date(year, selected_month, day)), unsafe_allow_html=True)
 
 elif view_mode == "Woche":
     start_of_week = date.today() - timedelta(days=date.today().weekday())
     cols = st.columns(7)
-    days_labels = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
     for i in range(7):
         d_obj = start_of_week + timedelta(days=i)
         with cols[i]:
-            st.write(f"**{days_labels[i]}** ({d_obj.day}.{d_obj.month}.)")
+            st.write(f"**{calendar.day_name[i][:2]}** ({d_obj.day}.{d_obj.month}.)")
             st.markdown(render_day_content(d_obj), unsafe_allow_html=True)
+
+elif view_mode == "Jahr":
+    st.subheader(f"Jahresübersicht {year}")
+    for r in range(4): # 4 Zeilen
+        cols = st.columns(3) # 3 Monate pro Zeile
+        for c in range(3):
+            m_idx = r * 3 + c + 1
+            with cols[c]:
+                st.markdown(f"<p style='text-align:center; margin-bottom:0;'><b>{calendar.month_name[m_idx]}</b></p>", unsafe_allow_html=True)
+                m_days = calendar.monthcalendar(year, m_idx)
+                for week in m_days:
+                    d_cols = st.columns(7)
+                    for i, day in enumerate(week):
+                        if day != 0:
+                            d_cols[i].markdown(render_day_content(date(year, m_idx, day), compact=True), unsafe_allow_html=True)
+                st.write("---")
 
 elif view_mode == "Liste":
     st.subheader("Anstehende Ereignisse")
-    # Hier könnte man noch eine sortierte Liste aus Events, Ferien und Feiertagen bauen
     st.dataframe(df_events, use_container_width=True)
