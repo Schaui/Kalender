@@ -209,7 +209,7 @@ else: # Liste
 # --- BENUTZER VERWALTUNG (SIDEBAR UNTEN) ---
 st.sidebar.markdown("---")
 with st.sidebar.expander("👤 Benutzer-Verwaltung"):
-    tab1, tab2, tab3 = st.tabs(["Neu", "Farbe", "Löschen"])
+    tab1, tab2, tab3 = st.tabs(["Neu", "Bearbeiten", "Löschen"])
     with tab1:
         new_name = st.text_input("Name", key="new_u")
         new_color = st.color_picker("Farbe", "#3498db", key="new_c")
