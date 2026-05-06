@@ -2,7 +2,7 @@ import streamlit as st
 from streamlit_gsheets import GSheetsConnection
 import holidays
 import pandas as pd
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 import calendar
 import requests
 
@@ -15,6 +15,16 @@ st.markdown("""
     .stMarkdown p { margin-bottom: 5px; }
     .dot-container { display: flex; justify-content: center; gap: 1px; margin-top: 1px; flex-wrap: wrap; }
     .dot { height: 4px; width: 4px; border-radius: 50%; }
+    /* Style für die Termin-Karten in der Liste */
+    .event-card {
+        background-color: #262730; 
+        border-radius: 8px; 
+        margin-bottom: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -57,18 +67,16 @@ else:
 
 show_ferien = st.sidebar.checkbox("Ferien anzeigen", value=True)
 
-# --- NEU: BENUTZER-FILTER ---
+# --- BENUTZER-FILTER ---
 st.sidebar.markdown("---")
 st.sidebar.subheader("👥 Filter (Anzeige)")
 visible_users = []
 if not df_users.empty:
     for _, user_row in df_users.iterrows():
-        # Jede Checkbox bekommt die Farbe des Nutzers als Label-Vorschau
         is_visible = st.sidebar.checkbox(f"{user_row['name']}", value=True, key=f"filter_{user_row['name']}")
         if is_visible:
             visible_users.append(user_row['name'])
 
-# Filtere das Event-DataFrame basierend auf der Auswahl
 df_events_filtered = df_events[df_events["user"].isin(visible_users)] if not df_events.empty else df_events
 
 st.sidebar.markdown("---")
@@ -97,7 +105,7 @@ with st.sidebar.expander("👤 Nutzer-Verwaltung"):
                 df_users = df_users[df_users["name"] != u_del]
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users); st.rerun()
 
-# --- HAUPTBEREICH ---
+# --- HAUPTBEREICH: EVENT MANAGEMENT ---
 st.title(f"📅 Team-Kalender {selected_year}")
 
 c1, c2, c3 = st.columns(3)
@@ -152,7 +160,6 @@ def render_day_content(d_obj, compact=False):
                 f_display_name = f["name"].split(f" {selected_year}")[0].capitalize()
                 break
     
-    # Benutze hier das GEFILTERTE DataFrame
     u_evs = df_events_filtered[df_events_filtered["date"] == str(d_obj)]
     bg = "#3d3d3d" if d_obj == date.today() else "transparent"
     f_ov = "rgba(241, 196, 15, 0.25)" if is_ferien else "transparent"
@@ -170,7 +177,7 @@ def render_day_content(d_obj, compact=False):
         html += f"<div style='background:{c}; color:white; padding:2px; margin-top:2px; font-size:10px; border-radius:3px;'>{row['title']}</div>"
     return html + "</div>"
 
-# --- RENDER ---
+# --- RENDER ANSICHTEN ---
 if view_mode == "Monat":
     st.subheader(f"{MONATS_NAMEN[selected_month-1]} {selected_year}")
     cols = st.columns(7)
@@ -180,6 +187,7 @@ if view_mode == "Monat":
         for i, day in enumerate(week):
             if day != 0:
                 with cols[i]: st.markdown(render_day_content(date(selected_year, selected_month, day)), unsafe_allow_html=True)
+
 elif view_mode == "Jahr":
     for r in range(4):
         cols = st.columns(3)
@@ -192,6 +200,27 @@ elif view_mode == "Jahr":
                     for i, day in enumerate(week):
                         if day != 0: d_cols[i].markdown(render_day_content(date(selected_year, m, day), True), unsafe_allow_html=True)
                 st.write("---")
+
 else:
-    st.subheader("Terminliste")
-    st.dataframe(df_events_filtered.sort_values("date"), use_container_width=True)
+    st.subheader("📋 Geplante Termine")
+    if df_events_filtered.empty:
+        st.info("Keine Termine für die ausgewählten Filter gefunden.")
+    else:
+        df_sorted = df_events_filtered.copy()
+        df_sorted['date_obj'] = pd.to_datetime(df_sorted['date'])
+        df_sorted = df_sorted.sort_values('date_obj')
+
+        for _, row in df_sorted.iterrows():
+            u_color = df_users[df_users["name"] == row["user"]]["color"].values[0] if row["user"] in df_users["name"].values else "#3498db"
+            d_fmt = row['date_obj'].strftime('%d. %b %Y')
+            st.markdown(f"""
+                <div class="event-card" style="border-left: 5px solid {u_color}; padding: 15px;">
+                    <div style="flex-grow: 1;">
+                        <span style="color: #888; font-size: 0.85rem;">{d_fmt}</span>
+                        <h4 style="margin: 0; color: white;">{row['title']}</h4>
+                    </div>
+                    <div style="background-color: {u_color}; color: white; padding: 4px 12px; border-radius: 15px; font-size: 0.8rem; font-weight: bold;">
+                        {row['user']}
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
