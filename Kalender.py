@@ -7,7 +7,7 @@ import calendar
 import requests
 
 # --- KONFIGURATION ---
-st.set_page_config(page_title="Team Kalender", layout="wide")
+st.set_page_config(page_title="Team Kalender SH", layout="wide")
 
 st.markdown("""
     <style>
@@ -57,6 +57,22 @@ else:
 
 show_ferien = st.sidebar.checkbox("Ferien anzeigen", value=True)
 
+# --- NEU: BENUTZER-FILTER ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("👥 Filter (Anzeige)")
+visible_users = []
+if not df_users.empty:
+    for _, user_row in df_users.iterrows():
+        # Jede Checkbox bekommt die Farbe des Nutzers als Label-Vorschau
+        is_visible = st.sidebar.checkbox(f"{user_row['name']}", value=True, key=f"filter_{user_row['name']}")
+        if is_visible:
+            visible_users.append(user_row['name'])
+
+# Filtere das Event-DataFrame basierend auf der Auswahl
+df_events_filtered = df_events[df_events["user"].isin(visible_users)] if not df_events.empty else df_events
+
+st.sidebar.markdown("---")
+
 # NUTZER VERWALTUNG
 with st.sidebar.expander("👤 Nutzer-Verwaltung"):
     t1, t2, t3 = st.tabs(["Neu", "Edit", "Del"])
@@ -91,7 +107,8 @@ with c1.expander("➕ Neuer Termin"):
         d = st.date_input("Wann?", date.today())
         u = st.selectbox("Wer?", df_users["name"].tolist() if not df_users.empty else ["-"])
         if st.form_submit_button("Speichern"):
-            df_events = pd.concat([df_events, pd.DataFrame([{"title": t, "date": str(d), "user": u}])], ignore_index=True)
+            new_ev = pd.DataFrame([{"title": t, "date": str(d), "user": u}])
+            df_events = pd.concat([df_events, new_ev], ignore_index=True)
             conn.update(spreadsheet=URL, worksheet="events", data=df_events); st.rerun()
 
 with c2.expander("✏️ Termin bearbeiten"):
@@ -135,7 +152,8 @@ def render_day_content(d_obj, compact=False):
                 f_display_name = f["name"].split(f" {selected_year}")[0].capitalize()
                 break
     
-    u_evs = df_events[df_events["date"] == str(d_obj)]
+    # Benutze hier das GEFILTERTE DataFrame
+    u_evs = df_events_filtered[df_events_filtered["date"] == str(d_obj)]
     bg = "#3d3d3d" if d_obj == date.today() else "transparent"
     f_ov = "rgba(241, 196, 15, 0.25)" if is_ferien else "transparent"
     
@@ -176,4 +194,4 @@ elif view_mode == "Jahr":
                 st.write("---")
 else:
     st.subheader("Terminliste")
-    st.dataframe(df_events.sort_values("date"), use_container_width=True)
+    st.dataframe(df_events_filtered.sort_values("date"), use_container_width=True)
