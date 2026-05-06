@@ -9,7 +9,6 @@ import requests
 # --- KONFIGURATION ---
 st.set_page_config(page_title="Team Kalender Pro", layout="wide")
 
-# CSS für bessere Spaltenstabilität (besonders für die Jahresansicht)
 st.markdown("""
     <style>
     [data-testid="column"] {
@@ -34,11 +33,31 @@ MONATS_NAMEN = [
 ]
 WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 
+# Mapping Bundesländer Namen zu Kürzeln
+BUNDESLAENDER_MAP = {
+    "Baden-Württemberg": "BW",
+    "Bayern": "BY",
+    "Berlin": "BE",
+    "Brandenburg": "BB",
+    "Bremen": "HB",
+    "Hamburg": "HH",
+    "Hessen": "HE",
+    "Mecklenburg-Vorpommern": "MV",
+    "Niedersachsen": "NI",
+    "Nordrhein-Westfalen": "NW",
+    "Rheinland-Pfalz": "RP",
+    "Saarland": "SL",
+    "Sachsen": "SN",
+    "Sachsen-Anhalt": "ST",
+    "Schleswig-Holstein": "SH",
+    "Thüringen": "TH"
+}
+
 # --- FUNKTIONEN: DATEN LADEN ---
 @st.cache_data(ttl=3600)
-def get_ferien(land, jahr):
+def get_ferien(land_code, jahr):
     try:
-        url = f"https://ferien-api.de/api/v1/holidays/{land}/{jahr}"
+        url = f"https://ferien-api.de/api/v1/holidays/{land_code}/{jahr}"
         response = requests.get(url)
         if response.status_code == 200:
             return response.json()
@@ -63,27 +82,26 @@ except:
 st.sidebar.title("⚙️ Einstellungen")
 view_mode = st.sidebar.radio("Ansicht:", ["Monat", "Woche", "Jahr", "Liste"])
 
+# Dynamische Jahr- und Monatswahl
 selected_year = st.sidebar.number_input("Jahr wählen:", min_value=2024, max_value=2030, value=date.today().year)
 
 if view_mode == "Monat":
-    monats_namen = [
-        "Januar", "Februar", "März", "April", "Mai", "Juni",
-        "Juli", "August", "September", "Oktober", "November", "Dezember"
-    ]
-    
     selected_month_name = st.sidebar.select_slider(
         "Monat wählen:", 
-        options=monats_namen,
-        value=monats_namen[date.today().month - 1]
+        options=MONATS_NAMEN,
+        value=MONATS_NAMEN[date.today().month - 1]
     )
-    
-    selected_month = monats_namen.index(selected_month_name) + 1
+    selected_month = MONATS_NAMEN.index(selected_month_name) + 1
 else:
     selected_month = date.today().month
 
-land = st.sidebar.selectbox("Bundesland (Ferien & Feiertage):", 
-                            ["BW", "BY", "BE", "BB", "HB", "HH", "HE", "MV", 
-                             "NI", "NW", "RP", "SL", "SN", "ST", "SH", "TH"], index=14)
+# Bundesland Auswahl voll ausgeschrieben
+land_voller_name = st.sidebar.selectbox(
+    "Bundesland (Ferien & Feiertage):", 
+    options=list(BUNDESLAENDER_MAP.keys()), 
+    index=14 # Schleswig-Holstein
+)
+land = BUNDESLAENDER_MAP[land_voller_name]
 
 only_national = st.sidebar.checkbox("Nur bundeseinheitliche Feiertage")
 show_ferien = st.sidebar.checkbox("Ferien anzeigen", value=True)
@@ -225,4 +243,7 @@ elif view_mode == "Jahr":
 
 elif view_mode == "Liste":
     st.subheader("Alle gespeicherten Termine")
-    st.dataframe(df_events.sort_values("date"), use_container_width=True)
+    if not df_events.empty:
+        st.dataframe(df_events.sort_values("date"), use_container_width=True)
+    else:
+        st.info("Keine Termine vorhanden.")
