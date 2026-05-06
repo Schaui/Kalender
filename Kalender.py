@@ -7,7 +7,7 @@ import calendar
 import requests
 
 # --- KONFIGURATION ---
-st.set_page_config(page_title="Team Kalender SH", layout="wide")
+st.set_page_config(page_title="Team Kalender", layout="wide")
 
 st.markdown("""
     <style>
@@ -25,7 +25,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 # Konstanten
 MONATS_NAMEN = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
 WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
-LAND_CODE = "SH"  # Festgelegt auf Schleswig-Holstein
+LAND_CODE = "SH" 
 
 # --- DATEN LADEN ---
 @st.cache_data(ttl=3600)
@@ -55,9 +55,6 @@ if view_mode == "Monat":
 else:
     selected_month = date.today().month
 
-# Bundesland-Auswahl entfernt, SH ist Standard
-st.sidebar.info("📌 Region: Schleswig-Holstein")
-only_national = st.sidebar.checkbox("Nur bundeseinheitliche Feiertage")
 show_ferien = st.sidebar.checkbox("Ferien anzeigen", value=True)
 
 # NUTZER VERWALTUNG
@@ -84,7 +81,7 @@ with st.sidebar.expander("👤 Nutzer-Verwaltung"):
                 df_users = df_users[df_users["name"] != u_del]
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users); st.rerun()
 
-# --- HAUPTBEREICH: EVENT MANAGEMENT ---
+# --- HAUPTBEREICH ---
 st.title(f"📅 Team-Kalender {selected_year}")
 
 c1, c2, c3 = st.columns(3)
@@ -102,7 +99,6 @@ with c2.expander("✏️ Termin bearbeiten"):
         ev_list = df_events.apply(lambda x: f"{x['title']} ({x['date']}) - {x['user']}", axis=1).tolist()
         sel_ev_text = st.selectbox("Termin wählen", ev_list, key="edit_sel")
         idx_to_edit = ev_list.index(sel_ev_text)
-        
         with st.form("edit_e"):
             et = st.text_input("Titel", value=df_events.at[idx_to_edit, "title"])
             ed = st.date_input("Datum", value=datetime.strptime(df_events.at[idx_to_edit, "date"], "%Y-%m-%d").date())
@@ -124,12 +120,10 @@ with c3.expander("🗑️ Termin löschen"):
 
 # --- KALENDER LOGIK ---
 de_hols = holidays.Germany(subdiv=LAND_CODE, years=selected_year)
-national_hols = holidays.Germany(years=selected_year)
 ferien_daten = get_ferien(LAND_CODE, selected_year)
 
 def render_day_content(d_obj, compact=False):
     h_name = de_hols.get(d_obj)
-    if only_national and d_obj not in national_hols: h_name = None
     is_ferien = False
     f_display_name = ""
     if show_ferien:
@@ -181,4 +175,5 @@ elif view_mode == "Jahr":
                         if day != 0: d_cols[i].markdown(render_day_content(date(selected_year, m, day), True), unsafe_allow_html=True)
                 st.write("---")
 else:
+    st.subheader("Terminliste")
     st.dataframe(df_events.sort_values("date"), use_container_width=True)
