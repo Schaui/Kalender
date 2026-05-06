@@ -84,22 +84,22 @@ df_events_filtered = df_events[df_events["user"].isin(visible_users)] if not df_
 with st.sidebar.expander("👤 Nutzer-Verwaltung"):
     t1, t2, t3 = st.tabs(["Neu", "Edit", "Del"])
     with t1:
-        n_n = st.text_input("Name")
-        n_c = st.color_picker("Farbe", "#3498db")
+        n_n = st.text_input("Name", key="new_user_name")
+        n_c = st.color_picker("Farbe", "#3498db", key="new_user_color")
         if st.button("Hinzufügen"):
             df_users = pd.concat([df_users, pd.DataFrame([{"name": n_n, "color": n_c}])], ignore_index=True)
             conn.update(spreadsheet=URL, worksheet="users", data=df_users); st.rerun()
     with t2:
         if not df_users.empty:
-            u_sel = st.selectbox("Wähle Nutzer", df_users["name"])
+            u_sel = st.selectbox("Wähle Nutzer", df_users["name"], key="edit_user_sel")
             u_idx = df_users[df_users["name"] == u_sel].index[0]
-            u_new_c = st.color_picker("Neue Farbe", df_users.at[u_idx, "color"])
+            u_new_c = st.color_picker("Neue Farbe", df_users.at[u_idx, "color"], key="edit_user_color")
             if st.button("Farbe speichern"):
                 df_users.at[u_idx, "color"] = u_new_c
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users); st.rerun()
     with t3:
         if not df_users.empty:
-            u_del = st.selectbox("Lösche Nutzer", df_users["name"])
+            u_del = st.selectbox("Lösche Nutzer", df_users["name"], key="del_user_sel")
             if st.button("Entfernen"):
                 df_users = df_users[df_users["name"] != u_del]
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users); st.rerun()
@@ -121,7 +121,7 @@ with c1.expander("➕ Neuer Termin"):
 with c2.expander("✏️ Termin bearbeiten"):
     if not df_events.empty:
         ev_list = df_events.apply(lambda x: f"{x['title']} ({x['date']}) - {x['user']}", axis=1).tolist()
-        sel_ev_text = st.selectbox("Termin wählen", ev_list, key="edit_sel")
+        sel_ev_text = st.selectbox("Termin wählen", ev_list, key="edit_ev_sel")
         idx_to_edit = ev_list.index(sel_ev_text)
         with st.form("edit_e"):
             et = st.text_input("Titel", value=df_events.at[idx_to_edit, "title"])
@@ -137,7 +137,7 @@ with c2.expander("✏️ Termin bearbeiten"):
 with c3.expander("🗑️ Termin löschen"):
     if not df_events.empty:
         ev_del_list = df_events.apply(lambda x: f"{x['title']} ({x['date']}) - {x['user']}", axis=1).tolist()
-        ev_to_del = st.selectbox("Wählen:", ev_del_list, key="del_sel")
+        ev_to_del = st.selectbox("Wählen:", ev_del_list, key="del_ev_sel")
         if st.button("Endgültig löschen"):
             df_events = df_events.drop(ev_del_list.index(ev_to_del))
             conn.update(spreadsheet=URL, worksheet="events", data=df_events); st.rerun()
@@ -148,8 +148,10 @@ ferien_daten = get_ferien(LAND_CODE, selected_year)
 
 def render_day_content(d_obj, compact=False):
     h_name = de_hols.get(d_obj) if show_hols_cal else None
+    
     is_ferien = False
     f_display_name = ""
+    # Ferien Logik korrigiert
     if show_ferien_cal:
         for f in ferien_daten:
             f_s = datetime.strptime(f["start"].split("T")[0], "%Y-%m-%d").date()
@@ -160,17 +162,24 @@ def render_day_content(d_obj, compact=False):
                 break
     
     u_evs = df_events_filtered[df_events_filtered["date"] == str(d_obj)]
-    bg = "#3d3d3d" if d_obj == date.today() else "transparent"
-    f_ov = "rgba(241, 196, 15, 0.25)" if is_ferien else "transparent"
+    bg_today = "#3d3d3d" if d_obj == date.today() else "transparent"
+    # Hintergrundfarbe für Ferien (Gelblich-Transparent)
+    f_bg = "rgba(241, 196, 15, 0.2)" if is_ferien else "transparent"
     
     if compact:
         dots = ("<div class='dot' style='background:#e74c3c;'></div>" if h_name else "") + \
                "".join([f"<div class='dot' style='background:{df_users[df_users['name']==u]['color'].values[0] if u in df_users['name'].values else '#3498db'};'></div>" for u in u_evs["user"].unique()])
-        return f"<div style='text-align:center; background:{f_ov}; font-size:10px; border-radius:2px; min-height:20px;'>{d_obj.day}<div class='dot-container'>{dots}</div></div>"
+        return f"<div style='text-align:center; background:{f_bg}; font-size:10px; border-radius:2px; min-height:20px;'>{d_obj.day}<div class='dot-container'>{dots}</div></div>"
     
-    html = f"<div style='border:1px solid #555; background-color:{bg}; background-image: linear-gradient({f_ov}, {f_ov}); padding:5px; min-height:90px; border-radius:5px;'>"
-    html += f"<div style='display:flex; justify-content:flex-start; align-items:baseline; gap:8px;'><b style='font-size:14px;'>{d_obj.day}</b><span style='color:black; font-size:10px; font-weight:bold;'>{f_display_name}</span></div>"
-    if h_name: html += f"<div style='background:#e74c3c; color:white; padding:2px; font-size:9px; border-radius:3px; margin-top:2px;'>{h_name}</div>"
+    html = f"<div style='border:1px solid #555; background-color:{bg_today}; background-image: linear-gradient({f_bg}, {f_bg}); padding:5px; min-height:90px; border-radius:5px;'>"
+    html += f"<div style='display:flex; justify-content:flex-start; align-items:baseline; gap:8px;'><b style='font-size:14px;'>{d_obj.day}</b>"
+    if is_ferien:
+        html += f"<span style='color:#f1c40f; font-size:9px; font-weight:bold;'>{f_display_name}</span>"
+    html += "</div>"
+    
+    if h_name: 
+        html += f"<div style='background:#e74c3c; color:white; padding:2px; font-size:9px; border-radius:3px; margin-top:2px;'>{h_name}</div>"
+    
     for _, row in u_evs.iterrows():
         c = df_users[df_users["name"] == row["user"]]["color"].values[0] if row["user"] in df_users["name"].values else "#333"
         html += f"<div style='background:{c}; color:white; padding:2px; margin-top:2px; font-size:10px; border-radius:3px;'>{row['title']}</div>"
@@ -203,13 +212,13 @@ elif view_mode == "Jahr":
 else:
     st.subheader("📋 Geplante Termine")
     
-    # Separate Toggles für die Liste
     col_t1, col_t2 = st.columns(2)
     with col_t1:
-        show_hols_list = st.toggle("Feiertage einblenden", value=True)
+        show_hols_list = st.toggle("Feiertage einblenden", value=True, key="list_hols_toggle")
     with col_t2:
-        show_ferien_list = st.toggle("Ferien einblenden", value=True)
+        show_ferien_list = st.toggle("Ferien einblenden", value=True, key="list_ferien_toggle")
     
+    # Basis-Daten für die Liste vorbereiten
     df_list = df_events_filtered.copy()
     if not df_list.empty:
         df_list['date_obj'] = pd.to_datetime(df_list['date']).dt.date
@@ -217,14 +226,12 @@ else:
         df_list = pd.DataFrame(columns=['title', 'date_obj', 'user', 'type'])
     df_list['type'] = 'event'
 
-    # Feiertage separat hinzufügen
     if show_hols_list:
         for d_obj, name in de_hols.items():
             if d_obj.year == selected_year:
                 new_row = pd.DataFrame([{"title": name, "date_obj": d_obj, "user": "Feiertag", "type": "holiday"}])
                 df_list = pd.concat([df_list, new_row], ignore_index=True)
     
-    # Ferien separat hinzufügen
     if show_ferien_list:
         for f in ferien_daten:
             f_s = datetime.strptime(f["start"].split("T")[0], "%Y-%m-%d").date()
