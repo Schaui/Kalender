@@ -35,22 +35,10 @@ MONATS_NAMEN = [
 WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 
 BUNDESLAENDER_MAP = {
-    "Baden-Württemberg": "BW",
-    "Bayern": "BY",
-    "Berlin": "BE",
-    "Brandenburg": "BB",
-    "Bremen": "HB",
-    "Hamburg": "HH",
-    "Hessen": "HE",
-    "Mecklenburg-Vorpommern": "MV",
-    "Niedersachsen": "NI",
-    "Nordrhein-Westfalen": "NW",
-    "Rheinland-Pfalz": "RP",
-    "Saarland": "SL",
-    "Sachsen": "SN",
-    "Sachsen-Anhalt": "ST",
-    "Schleswig-Holstein": "SH",
-    "Thüringen": "TH"
+    "Baden-Württemberg": "BW", "Bayern": "BY", "Berlin": "BE", "Brandenburg": "BB",
+    "Bremen": "HB", "Hamburg": "HH", "Hessen": "HE", "Mecklenburg-Vorpommern": "MV",
+    "Niedersachsen": "NI", "Nordrhein-Westfalen": "NW", "Rheinland-Pfalz": "RP",
+    "Saarland": "SL", "Sachsen": "SN", "Sachsen-Anhalt": "ST", "Schleswig-Holstein": "SH", "Thüringen": "TH"
 }
 
 # --- FUNKTIONEN: DATEN LADEN ---
@@ -80,7 +68,8 @@ except:
 
 # --- SIDEBAR: STEUERUNG ---
 st.sidebar.title("⚙️ Einstellungen")
-view_mode = st.sidebar.radio("Ansicht:", ["Monat", "Woche", "Jahr", "Liste"])
+# Wochenansicht entfernt
+view_mode = st.sidebar.radio("Ansicht:", ["Monat", "Jahr", "Liste"])
 
 selected_year = st.sidebar.number_input("Jahr wählen:", min_value=2024, max_value=2030, value=date.today().year)
 
@@ -88,17 +77,13 @@ if view_mode == "Monat":
     selected_month_name = st.sidebar.select_slider(
         "Monat wählen:", 
         options=MONATS_NAMEN,
-        value=MONATS_NAMEN[date.today().month - 1]
+        value=MONATS_NAMEN[date.today().month - 1] if date.today().year == selected_year else "Januar"
     )
     selected_month = MONATS_NAMEN.index(selected_month_name) + 1
 else:
     selected_month = date.today().month
 
-land_voller_name = st.sidebar.selectbox(
-    "Bundesland (Ferien & Feiertage):", 
-    options=list(BUNDESLAENDER_MAP.keys()), 
-    index=14
-)
+land_voller_name = st.sidebar.selectbox("Bundesland:", options=list(BUNDESLAENDER_MAP.keys()), index=14)
 land = BUNDESLAENDER_MAP[land_voller_name]
 
 only_national = st.sidebar.checkbox("Nur bundeseinheitliche Feiertage")
@@ -124,27 +109,20 @@ with st.sidebar.expander("👤 Nutzer-Verwaltung"):
             if st.button("Aktualisieren"):
                 df_users.loc[df_users["name"] == u_edit, ["name", "color"]] = [new_n_edit, new_c_edit]
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
-                if new_n_edit != u_edit:
-                    df_events.loc[df_events["user"] == u_edit, "user"] = new_n_edit
-                    conn.update(spreadsheet=URL, worksheet="events", data=df_events)
                 st.rerun()
     with tab3:
         if not df_users.empty:
             u_del = st.selectbox("Löschen:", df_users["name"].tolist(), key="del_u")
-            del_ev = st.checkbox("Auch Termine löschen?")
             if st.button("Benutzer entfernen"):
                 df_users = df_users[df_users["name"] != u_del]
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
-                if del_ev:
-                    df_events = df_events[df_events["user"] != u_del]
-                    conn.update(spreadsheet=URL, worksheet="events", data=df_events)
                 st.rerun()
 
-# --- HAUPTBEREICH: TERMINE ---
+# --- HAUPTBEREICH ---
 st.title(f"📅 Team-Kalender {selected_year}")
 
 col_ev1, col_ev2 = st.columns(2)
-with col_ev1.expander("➕ Neuen Termin eintragen"):
+with col_ev1.expander("➕ Neuen Termin"):
     with st.form("add_event"):
         t_title = st.text_input("Was?")
         t_date = st.date_input("Wann?", date.today())
@@ -158,7 +136,7 @@ with col_ev1.expander("➕ Neuen Termin eintragen"):
 with col_ev2.expander("🗑️ Termin löschen"):
     if not df_events.empty:
         ev_list = df_events.apply(lambda x: f"{x['title']} ({x['date']})", axis=1).tolist()
-        ev_to_del = st.selectbox("Termin wählen:", ev_list)
+        ev_to_del = st.selectbox("Wählen:", ev_list)
         if st.button("Löschen"):
             idx = ev_list.index(ev_to_del)
             df_events = df_events.drop(df_events.index[idx])
@@ -182,7 +160,8 @@ def render_day_content(d_obj, compact=False):
             f_end = datetime.strptime(f["end"].split("T")[0], "%Y-%m-%d").date()
             if f_start <= d_obj <= f_end:
                 is_ferien = True
-                f_display_name = f["name"].split(" 20")[0] 
+                raw_name = f["name"].split(f" {selected_year}")[0]
+                f_display_name = raw_name.capitalize()
                 break
     
     u_events = df_events[df_events["date"] == str(d_obj)]
@@ -202,7 +181,7 @@ def render_day_content(d_obj, compact=False):
     <div style='border:1px solid #555; background-color:{bg_color}; background-image: linear-gradient({ferien_overlay}, {ferien_overlay}); padding:5px; min-height:90px; border-radius:5px;'>
         <div style='display: flex; justify-content: flex-start; align-items: baseline; gap: 8px;'>
             <b style='font-size:14px;'>{d_obj.day}</b>
-            <span style='color: black; font-size: 9px; font-weight: bold;'>{f_display_name}</span>
+            <span style='color: black; font-size: 10px; font-weight: bold;'>{f_display_name}</span>
         </div>
     """
     if h_name:
@@ -224,15 +203,6 @@ if view_mode == "Monat":
             if day != 0:
                 with cols[i]: st.markdown(render_day_content(date(selected_year, selected_month, day)), unsafe_allow_html=True)
 
-elif view_mode == "Woche":
-    start_of_week = date.today() - timedelta(days=date.today().weekday())
-    cols = st.columns(7)
-    for i in range(7):
-        d_obj = start_of_week + timedelta(days=i)
-        with cols[i]:
-            st.write(f"**{WOCHENTAGE[i]}** ({d_obj.day}.{d_obj.month}.)")
-            st.markdown(render_day_content(d_obj), unsafe_allow_html=True)
-
 elif view_mode == "Jahr":
     for r in range(4):
         cols = st.columns(3)
@@ -247,8 +217,6 @@ elif view_mode == "Jahr":
                 st.write("---")
 
 elif view_mode == "Liste":
-    st.subheader("Alle gespeicherten Termine")
+    st.subheader("Terminliste")
     if not df_events.empty:
         st.dataframe(df_events.sort_values("date"), use_container_width=True)
-    else:
-        st.info("Keine Termine vorhanden.")
