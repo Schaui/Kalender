@@ -7,7 +7,7 @@ import calendar
 import requests
 
 # --- KONFIGURATION ---
-st.set_page_config(page_title="Team Kalender SH", layout="wide")
+st.set_page_config(page_title="Team Kalender", layout="wide")
 
 st.markdown("""
     <style>
@@ -15,9 +15,7 @@ st.markdown("""
     .stMarkdown p { margin-bottom: 5px; }
     .dot-container { display: flex; justify-content: center; gap: 1px; margin-top: 1px; flex-wrap: wrap; }
     .dot { height: 4px; width: 4px; border-radius: 50%; }
-    /* Style für die Termin-Karten in der Liste */
     .event-card {
-        background-color: #262730; 
         border-radius: 8px; 
         margin-bottom: 10px;
         display: flex;
@@ -65,7 +63,7 @@ if view_mode == "Monat":
 else:
     selected_month = date.today().month
 
-show_ferien = st.sidebar.checkbox("Ferien anzeigen", value=True)
+show_ferien = st.sidebar.checkbox("Ferien im Kalender anzeigen", value=True)
 
 # --- BENUTZER-FILTER ---
 st.sidebar.markdown("---")
@@ -79,9 +77,7 @@ if not df_users.empty:
 
 df_events_filtered = df_events[df_events["user"].isin(visible_users)] if not df_events.empty else df_events
 
-st.sidebar.markdown("---")
-
-# NUTZER VERWALTUNG
+# --- NUTZER VERWALTUNG ---
 with st.sidebar.expander("👤 Nutzer-Verwaltung"):
     t1, t2, t3 = st.tabs(["Neu", "Edit", "Del"])
     with t1:
@@ -203,23 +199,50 @@ elif view_mode == "Jahr":
 
 else:
     st.subheader("📋 Geplante Termine")
-    if df_events_filtered.empty:
-        st.info("Keine Termine für die ausgewählten Filter gefunden.")
+    show_extra_list = st.toggle("Feiertage & Ferien in Liste anzeigen", value=True)
+    
+    df_list = df_events_filtered.copy()
+    if not df_list.empty:
+        df_list['date_obj'] = pd.to_datetime(df_list['date']).dt.date
     else:
-        df_sorted = df_events_filtered.copy()
-        df_sorted['date_obj'] = pd.to_datetime(df_sorted['date'])
-        df_sorted = df_sorted.sort_values('date_obj')
+        df_list = pd.DataFrame(columns=['title', 'date_obj', 'user', 'type'])
+    df_list['type'] = 'event'
 
-        for _, row in df_sorted.iterrows():
-            u_color = df_users[df_users["name"] == row["user"]]["color"].values[0] if row["user"] in df_users["name"].values else "#3498db"
+    if show_extra_list:
+        # Feiertage
+        for d_obj, name in de_hols.items():
+            if d_obj.year == selected_year:
+                new_row = pd.DataFrame([{"title": name, "date_obj": d_obj, "user": "Feiertag", "type": "holiday"}])
+                df_list = pd.concat([df_list, new_row], ignore_index=True)
+        # Ferien
+        for f in ferien_daten:
+            f_s = datetime.strptime(f["start"].split("T")[0], "%Y-%m-%d").date()
+            f_e = datetime.strptime(f["end"].split("T")[0], "%Y-%m-%d").date()
+            f_name = f["name"].split(f" {selected_year}")[0].capitalize()
+            new_row = pd.DataFrame([{"title": f"{f_name} (Beginn)", "date_obj": f_s, "user": "Ferien", "type": "ferien"}])
+            df_list = pd.concat([df_list, new_row], ignore_index=True)
+
+    if df_list.empty:
+        st.info("Keine Einträge gefunden.")
+    else:
+        df_list = df_list.sort_values('date_obj')
+        for _, row in df_list.iterrows():
             d_fmt = row['date_obj'].strftime('%d. %b %Y')
+            if row['type'] == 'holiday':
+                bg_color, border_color, label_color = "#4d1a1a", "#e74c3c", "#e74c3c"
+            elif row['type'] == 'ferien':
+                bg_color, border_color, label_color = "#3d3516", "#f1c40f", "#f1c40f"
+            else:
+                u_color = df_users[df_users["name"] == row["user"]]["color"].values[0] if row["user"] in df_users["name"].values else "#3498db"
+                bg_color, border_color, label_color = "#262730", u_color, u_color
+
             st.markdown(f"""
-                <div class="event-card" style="border-left: 5px solid {u_color}; padding: 15px;">
+                <div class="event-card" style="border-left: 5px solid {border_color}; background-color: {bg_color}; padding: 15px;">
                     <div style="flex-grow: 1;">
-                        <span style="color: #888; font-size: 0.85rem;">{d_fmt}</span>
+                        <span style="color: #aaa; font-size: 0.85rem;">{d_fmt}</span>
                         <h4 style="margin: 0; color: white;">{row['title']}</h4>
                     </div>
-                    <div style="background-color: {u_color}; color: white; padding: 4px 12px; border-radius: 15px; font-size: 0.8rem; font-weight: bold;">
+                    <div style="background-color: {label_color}; color: white; padding: 4px 12px; border-radius: 15px; font-size: 0.8rem; font-weight: bold;">
                         {row['user']}
                     </div>
                 </div>
