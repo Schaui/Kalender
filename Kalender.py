@@ -9,10 +9,14 @@ import requests
 # --- KONFIGURATION ---
 st.set_page_config(page_title="Team Kalender Pro", layout="wide")
 
+# CSS für bessere Spaltenstabilität (besonders für die Jahresansicht)
 st.markdown("""
     <style>
     [data-testid="column"] {
         min-width: 150px;
+    }
+    .stMarkdown p {
+        margin-bottom: 5px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -22,6 +26,13 @@ URL = "https://docs.google.com/spreadsheets/d/1pk6k10OKOEeR7JPfOm6AjRiccLTx6Fnh0
 
 # Verbindung aufbauen
 conn = st.connection("gsheets", type=GSheetsConnection)
+
+# Konstanten für deutsche Anzeige
+MONATS_NAMEN = [
+    "Januar", "Februar", "März", "April", "Mai", "Juni",
+    "Juli", "August", "September", "Oktober", "November", "Dezember"
+]
+WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 
 # --- FUNKTIONEN: DATEN LADEN ---
 @st.cache_data(ttl=3600)
@@ -38,11 +49,8 @@ def get_ferien(land, jahr):
 def load_data():
     u = conn.read(spreadsheet=URL, worksheet="users", ttl=5)
     e = conn.read(spreadsheet=URL, worksheet="events", ttl=5)
-    
-    if "name" not in u.columns:
-        u = pd.DataFrame(columns=["name", "color"])
-    if "date" not in e.columns:
-        e = pd.DataFrame(columns=["title", "date", "user"])
+    if "name" not in u.columns: u = pd.DataFrame(columns=["name", "color"])
+    if "date" not in e.columns: e = pd.DataFrame(columns=["title", "date", "user"])
     return u, e
 
 try:
@@ -55,22 +63,15 @@ except:
 st.sidebar.title("⚙️ Einstellungen")
 view_mode = st.sidebar.radio("Ansicht:", ["Monat", "Woche", "Jahr", "Liste"])
 
-# Dynamische Jahr- und Monatswahl
 selected_year = st.sidebar.number_input("Jahr wählen:", min_value=2024, max_value=2030, value=date.today().year)
 
 if view_mode == "Monat":
-    # Eine Liste der Monatsnamen für die Anzeige erstellen
-    monats_namen = [
-        "Januar", "Februar", "März", "April", "Mai", "Juni",
-        "Juli", "August", "September", "Oktober", "November", "Dezember"
-    ]
-    
     selected_month = st.sidebar.slider(
         "Monat wählen:", 
         min_value=1, 
         max_value=12, 
         value=date.today().month,
-        format_func=lambda x: monats_namen[x-1]  # Wandelt 1 in "Januar", 2 in "Februar" etc. um
+        format_func=lambda x: MONATS_NAMEN[x-1]
     )
 else:
     selected_month = date.today().month
@@ -85,7 +86,6 @@ show_ferien = st.sidebar.checkbox("Ferien anzeigen", value=True)
 # --- SIDEBAR: USER MANAGEMENT ---
 with st.sidebar.expander("👤 Nutzer-Verwaltung"):
     tab1, tab2, tab3 = st.tabs(["Neu", "Bearbeiten", "Löschen"])
-    
     with tab1:
         new_name = st.text_input("Name", key="new_u")
         new_color = st.color_picker("Farbe", "#3498db", key="new_c")
@@ -94,7 +94,6 @@ with st.sidebar.expander("👤 Nutzer-Verwaltung"):
             updated = pd.concat([df_users, new_row], ignore_index=True)
             conn.update(spreadsheet=URL, worksheet="users", data=updated)
             st.rerun()
-
     with tab2:
         if not df_users.empty:
             u_edit = st.selectbox("Wählen:", df_users["name"].tolist(), key="edit_u")
@@ -108,7 +107,6 @@ with st.sidebar.expander("👤 Nutzer-Verwaltung"):
                     df_events.loc[df_events["user"] == u_edit, "user"] = new_n_edit
                     conn.update(spreadsheet=URL, worksheet="events", data=df_events)
                 st.rerun()
-
     with tab3:
         if not df_users.empty:
             u_del = st.selectbox("Löschen:", df_users["name"].tolist(), key="del_u")
@@ -154,7 +152,6 @@ ferien_daten = get_ferien(land, selected_year)
 def render_day_content(d_obj, compact=False):
     h_name = de_hols.get(d_obj)
     if only_national and d_obj not in national_hols: h_name = None
-    
     is_ferien = False
     f_name = ""
     if show_ferien:
@@ -165,14 +162,10 @@ def render_day_content(d_obj, compact=False):
                 is_ferien = True
                 f_name = f["name"]
                 break
-
     u_events = df_events[df_events["date"] == str(d_obj)]
     is_today = (d_obj == date.today())
-    
-    # Styling
     bg = "#3d3d3d" if is_today else "transparent"
     f_bg = "rgba(241, 196, 15, 0.1)" if is_ferien else "transparent"
-    
     if compact:
         dot_color = "transparent"
         if h_name: dot_color = "#e74c3c"
@@ -180,7 +173,6 @@ def render_day_content(d_obj, compact=False):
             dot_color = df_users[df_users["name"] == u_events.iloc[0]["user"]]["color"].values[0] if not df_users.empty else "#3498db"
         dot_html = f"<div style='height:4px; width:4px; background:{dot_color}; border-radius:50%; margin: 0 auto;'></div>" if dot_color != "transparent" else ""
         return f"<div style='text-align:center; background:{f_bg}; font-size:10px; border-radius:2px;'>{d_obj.day}{dot_html}</div>"
-
     html = f"<div style='border:1px solid #555; background-color:{bg}; background-image: linear-gradient({f_bg}, {f_bg}); padding:5px; min-height:90px; border-radius:5px;'>"
     html += f"<b style='font-size:14px;'>{d_obj.day}</b>"
     if h_name:
@@ -194,10 +186,10 @@ def render_day_content(d_obj, compact=False):
 
 # --- ANSICHTEN ---
 if view_mode == "Monat":
-    st.subheader(f"{calendar.month_name[selected_month]} {selected_year}")
+    st.subheader(f"{MONATS_NAMEN[selected_month-1]} {selected_year}")
     month_days = calendar.monthcalendar(selected_year, selected_month)
     cols = st.columns(7)
-    for i, d in enumerate(["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]): cols[i].write(f"**{d}**")
+    for i, d in enumerate(WOCHENTAGE): cols[i].write(f"**{d}**")
     for week in month_days:
         cols = st.columns(7)
         for i, day in enumerate(week):
@@ -205,13 +197,12 @@ if view_mode == "Monat":
                 with cols[i]: st.markdown(render_day_content(date(selected_year, selected_month, day)), unsafe_allow_html=True)
 
 elif view_mode == "Woche":
-    # Berechnet Start der aktuellen Woche (Montag)
     start_of_week = date.today() - timedelta(days=date.today().weekday())
     cols = st.columns(7)
     for i in range(7):
         d_obj = start_of_week + timedelta(days=i)
         with cols[i]:
-            st.write(f"**{calendar.day_name[i][:2]}** ({d_obj.day}.{d_obj.month}.)")
+            st.write(f"**{WOCHENTAGE[i]}** ({d_obj.day}.{d_obj.month}.)")
             st.markdown(render_day_content(d_obj), unsafe_allow_html=True)
 
 elif view_mode == "Jahr":
@@ -220,7 +211,7 @@ elif view_mode == "Jahr":
         for c in range(3):
             m_idx = r * 3 + c + 1
             with cols[c]:
-                st.markdown(f"<p style='text-align:center; margin-bottom:0;'><b>{calendar.month_name[m_idx]}</b></p>", unsafe_allow_html=True)
+                st.markdown(f"<p style='text-align:center; margin-bottom:0;'><b>{MONATS_NAMEN[m_idx-1]}</b></p>", unsafe_allow_html=True)
                 for week in calendar.monthcalendar(selected_year, m_idx):
                     d_cols = st.columns(7)
                     for i, day in enumerate(week):
