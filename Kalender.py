@@ -66,13 +66,18 @@ view_mode = st.sidebar.radio("Ansicht:", ["Monat", "Woche", "Jahr", "Liste"])
 selected_year = st.sidebar.number_input("Jahr wählen:", min_value=2024, max_value=2030, value=date.today().year)
 
 if view_mode == "Monat":
-    selected_month = st.sidebar.slider(
+    monats_namen = [
+        "Januar", "Februar", "März", "April", "Mai", "Juni",
+        "Juli", "August", "September", "Oktober", "November", "Dezember"
+    ]
+    
+    selected_month_name = st.sidebar.select_slider(
         "Monat wählen:", 
-        min_value=1, 
-        max_value=12, 
-        value=date.today().month,
-        format_func=lambda x: MONATS_NAMEN[x-1]
+        options=monats_namen,
+        value=monats_namen[date.today().month - 1]
     )
+    
+    selected_month = monats_namen.index(selected_month_name) + 1
 else:
     selected_month = date.today().month
 
