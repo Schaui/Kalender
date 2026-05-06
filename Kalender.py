@@ -7,7 +7,7 @@ import calendar
 import requests
 
 # --- KONFIGURATION ---
-st.set_page_config(page_title="Team Kalender Pro", layout="wide")
+st.set_page_config(page_title="Team Kalender SH", layout="wide")
 
 st.markdown("""
     <style>
@@ -18,17 +18,14 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+# Google Sheets URL
 URL = "https://docs.google.com/spreadsheets/d/1pk6k10OKOEeR7JPfOm6AjRiccLTx6Fnh01MitDGEXsE/edit#gid=0"
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+# Konstanten
 MONATS_NAMEN = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
 WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
-BUNDESLAENDER_MAP = {
-    "Baden-Württemberg": "BW", "Bayern": "BY", "Berlin": "BE", "Brandenburg": "BB",
-    "Bremen": "HB", "Hamburg": "HH", "Hessen": "HE", "Mecklenburg-Vorpommern": "MV",
-    "Niedersachsen": "NI", "Nordrhein-Westfalen": "NW", "Rheinland-Pfalz": "RP",
-    "Saarland": "SL", "Sachsen": "SN", "Sachsen-Anhalt": "ST", "Schleswig-Holstein": "SH", "Thüringen": "TH"
-}
+LAND_CODE = "SH"  # Festgelegt auf Schleswig-Holstein
 
 # --- DATEN LADEN ---
 @st.cache_data(ttl=3600)
@@ -58,8 +55,8 @@ if view_mode == "Monat":
 else:
     selected_month = date.today().month
 
-land_voller_name = st.sidebar.selectbox("Bundesland:", options=list(BUNDESLAENDER_MAP.keys()), index=14)
-land = BUNDESLAENDER_MAP[land_voller_name]
+# Bundesland-Auswahl entfernt, SH ist Standard
+st.sidebar.info("📌 Region: Schleswig-Holstein")
 only_national = st.sidebar.checkbox("Nur bundeseinheitliche Feiertage")
 show_ferien = st.sidebar.checkbox("Ferien anzeigen", value=True)
 
@@ -100,10 +97,8 @@ with c1.expander("➕ Neuer Termin"):
             df_events = pd.concat([df_events, pd.DataFrame([{"title": t, "date": str(d), "user": u}])], ignore_index=True)
             conn.update(spreadsheet=URL, worksheet="events", data=df_events); st.rerun()
 
-# Bearbeitungs-Bereich mit Name im Dropdown
 with c2.expander("✏️ Termin bearbeiten"):
     if not df_events.empty:
-        # Erstelle Liste mit Titel, Datum und User
         ev_list = df_events.apply(lambda x: f"{x['title']} ({x['date']}) - {x['user']}", axis=1).tolist()
         sel_ev_text = st.selectbox("Termin wählen", ev_list, key="edit_sel")
         idx_to_edit = ev_list.index(sel_ev_text)
@@ -119,7 +114,6 @@ with c2.expander("✏️ Termin bearbeiten"):
                 df_events.at[idx_to_edit, "user"] = eu
                 conn.update(spreadsheet=URL, worksheet="events", data=df_events); st.rerun()
 
-# Lösch-Bereich mit Name im Dropdown
 with c3.expander("🗑️ Termin löschen"):
     if not df_events.empty:
         ev_del_list = df_events.apply(lambda x: f"{x['title']} ({x['date']}) - {x['user']}", axis=1).tolist()
@@ -129,9 +123,9 @@ with c3.expander("🗑️ Termin löschen"):
             conn.update(spreadsheet=URL, worksheet="events", data=df_events); st.rerun()
 
 # --- KALENDER LOGIK ---
-de_hols = holidays.Germany(subdiv=land, years=selected_year)
+de_hols = holidays.Germany(subdiv=LAND_CODE, years=selected_year)
 national_hols = holidays.Germany(years=selected_year)
-ferien_daten = get_ferien(land, selected_year)
+ferien_daten = get_ferien(LAND_CODE, selected_year)
 
 def render_day_content(d_obj, compact=False):
     h_name = de_hols.get(d_obj)
