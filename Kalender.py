@@ -53,6 +53,51 @@ with st.sidebar.expander("👤 User anlegen"):
         st.success("User angelegt!")
         st.rerun()
 
+with st.sidebar.expander("📝 User bearbeiten"):
+    if not df_users.empty:
+        user_to_edit = st.selectbox("Welchen User bearbeiten?", df_users["name"].tolist(), key="edit_user_sel")
+        
+        # Aktuelle Daten holen
+        current_row = df_users[df_users["name"] == user_to_edit].iloc[0]
+        
+        new_name_edit = st.text_input("Neuer Name", value=current_row["name"])
+        new_color_edit = st.color_picker("Neue Farbe", value=current_row["color"])
+        
+        if st.button("Änderungen speichern"):
+            # Den alten Eintrag entfernen und den neuen hinzufügen
+            df_users = df_users[df_users["name"] != user_to_edit]
+            edit_row = pd.DataFrame([{"name": new_name_edit, "color": new_color_edit}])
+            updated_users = pd.concat([df_users, edit_row], ignore_index=True)
+            
+            # In Cloud speichern
+            conn.update(spreadsheet=URL, worksheet="users", data=updated_users)
+            
+            # WICHTIG: Wenn der Name geändert wurde, müssen auch die Termine aktualisiert werden!
+            if new_name_edit != user_to_edit:
+                df_events.loc[df_events["user"] == user_to_edit, "user"] = new_name_edit
+                conn.update(spreadsheet=URL, worksheet="events", data=df_events)
+            
+            st.success("User aktualisiert!")
+            st.rerun()
+
+with st.sidebar.expander("❌ User löschen"):
+    if not df_users.empty:
+        user_to_del = st.selectbox("Welchen User löschen?", df_users["name"].tolist(), key="del_user_sel")
+        delete_events = st.checkbox("Auch alle Termine dieses Users löschen?")
+        
+        if st.button("User endgültig entfernen"):
+            # User entfernen
+            updated_users = df_users[df_users["name"] != user_to_del]
+            conn.update(spreadsheet=URL, worksheet="users", data=updated_users)
+            
+            # Termine entfernen (falls gewünscht)
+            if delete_events:
+                updated_events = df_events[df_events["user"] != user_to_del]
+                conn.update(spreadsheet=URL, worksheet="events", data=updated_events)
+            
+            st.success(f"User {user_to_del} wurde gelöscht!")
+            st.rerun()
+
 # --- TERMIN EINTRAGEN ---
 st.title(f"📅 Team-Kalender {date.today().year}")
 with st.expander("➕ Neuen Termin eintragen"):
@@ -67,6 +112,30 @@ with st.expander("➕ Neuen Termin eintragen"):
             conn.update(spreadsheet=URL, worksheet="events", data=updated_ev)
             st.success("Termin gespeichert!")
             st.rerun()
+
+# --- TERMIN LÖSCHEN ---
+with st.expander("🗑️ Termin löschen"):
+    if not df_events.empty:
+        # Wir erstellen eine Liste mit Anzeigenamen (Titel + Datum), 
+        # damit man bei gleichen Namen weiß, welchen man löscht.
+        event_options = df_events.apply(lambda x: f"{x['title']} ({x['date']})", axis=1).tolist()
+        
+        event_to_delete_str = st.selectbox("Welchen Termin möchtest du entfernen?", event_options)
+        
+        if st.button("Termin endgültig löschen"):
+            # Den Index des gewählten Termins finden
+            idx = event_options.index(event_to_delete_str)
+            
+            # Das DataFrame ohne diese Zeile neu erstellen
+            updated_ev = df_events.drop(df_events.index[idx])
+            
+            # Die komplette Tabelle in Google Sheets überschreiben
+            conn.update(spreadsheet=URL, worksheet="events", data=updated_ev)
+            
+            st.success("Der Termin wurde aus der Cloud gelöscht!")
+            st.rerun()
+    else:
+        st.info("Keine Termine zum Löschen vorhanden.")
 
 # --- FEIERTAGS-LOGIK ---
 year = date.today().year
