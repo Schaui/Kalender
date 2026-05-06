@@ -63,11 +63,14 @@ if view_mode == "Monat":
 else:
     selected_month = date.today().month
 
-show_ferien = st.sidebar.checkbox("Ferien im Kalender anzeigen", value=True)
+# Separate Toggles für Kalender-Anzeige
+st.sidebar.subheader("Anzeige Kalender")
+show_hols_cal = st.sidebar.checkbox("Feiertage anzeigen", value=True)
+show_ferien_cal = st.sidebar.checkbox("Ferien anzeigen", value=True)
 
 # --- BENUTZER-FILTER ---
 st.sidebar.markdown("---")
-st.sidebar.subheader("👥 Filter (Anzeige)")
+st.sidebar.subheader("👥 Filter (Personen)")
 visible_users = []
 if not df_users.empty:
     for _, user_row in df_users.iterrows():
@@ -144,10 +147,10 @@ de_hols = holidays.Germany(subdiv=LAND_CODE, years=selected_year)
 ferien_daten = get_ferien(LAND_CODE, selected_year)
 
 def render_day_content(d_obj, compact=False):
-    h_name = de_hols.get(d_obj)
+    h_name = de_hols.get(d_obj) if show_hols_cal else None
     is_ferien = False
     f_display_name = ""
-    if show_ferien:
+    if show_ferien_cal:
         for f in ferien_daten:
             f_s = datetime.strptime(f["start"].split("T")[0], "%Y-%m-%d").date()
             f_e = datetime.strptime(f["end"].split("T")[0], "%Y-%m-%d").date()
@@ -199,7 +202,13 @@ elif view_mode == "Jahr":
 
 else:
     st.subheader("📋 Geplante Termine")
-    show_extra_list = st.toggle("Feiertage & Ferien in Liste anzeigen", value=True)
+    
+    # Separate Toggles für die Liste
+    col_t1, col_t2 = st.columns(2)
+    with col_t1:
+        show_hols_list = st.toggle("Feiertage einblenden", value=True)
+    with col_t2:
+        show_ferien_list = st.toggle("Ferien einblenden", value=True)
     
     df_list = df_events_filtered.copy()
     if not df_list.empty:
@@ -208,13 +217,15 @@ else:
         df_list = pd.DataFrame(columns=['title', 'date_obj', 'user', 'type'])
     df_list['type'] = 'event'
 
-    if show_extra_list:
-        # Feiertage
+    # Feiertage separat hinzufügen
+    if show_hols_list:
         for d_obj, name in de_hols.items():
             if d_obj.year == selected_year:
                 new_row = pd.DataFrame([{"title": name, "date_obj": d_obj, "user": "Feiertag", "type": "holiday"}])
                 df_list = pd.concat([df_list, new_row], ignore_index=True)
-        # Ferien
+    
+    # Ferien separat hinzufügen
+    if show_ferien_list:
         for f in ferien_daten:
             f_s = datetime.strptime(f["start"].split("T")[0], "%Y-%m-%d").date()
             f_e = datetime.strptime(f["end"].split("T")[0], "%Y-%m-%d").date()
