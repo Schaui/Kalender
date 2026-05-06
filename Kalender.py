@@ -100,25 +100,29 @@ with c1.expander("➕ Neuer Termin"):
             df_events = pd.concat([df_events, pd.DataFrame([{"title": t, "date": str(d), "user": u}])], ignore_index=True)
             conn.update(spreadsheet=URL, worksheet="events", data=df_events); st.rerun()
 
+# Bearbeitungs-Bereich mit Name im Dropdown
 with c2.expander("✏️ Termin bearbeiten"):
     if not df_events.empty:
-        ev_list = df_events.apply(lambda x: f"{x['title']} ({x['date']})", axis=1).tolist()
+        # Erstelle Liste mit Titel, Datum und User
+        ev_list = df_events.apply(lambda x: f"{x['title']} ({x['date']}) - {x['user']}", axis=1).tolist()
         sel_ev_text = st.selectbox("Termin wählen", ev_list, key="edit_sel")
         idx_to_edit = ev_list.index(sel_ev_text)
         
         with st.form("edit_e"):
             et = st.text_input("Titel", value=df_events.at[idx_to_edit, "title"])
             ed = st.date_input("Datum", value=datetime.strptime(df_events.at[idx_to_edit, "date"], "%Y-%m-%d").date())
-            eu = st.selectbox("Nutzer", df_users["name"].tolist(), index=df_users["name"].tolist().index(df_events.at[idx_to_edit, "user"]) if df_events.at[idx_to_edit, "user"] in df_users["name"].values else 0)
+            eu = st.selectbox("Nutzer", df_users["name"].tolist(), 
+                              index=df_users["name"].tolist().index(df_events.at[idx_to_edit, "user"]) if df_events.at[idx_to_edit, "user"] in df_users["name"].values else 0)
             if st.form_submit_button("Änderungen speichern"):
                 df_events.at[idx_to_edit, "title"] = et
                 df_events.at[idx_to_edit, "date"] = str(ed)
                 df_events.at[idx_to_edit, "user"] = eu
                 conn.update(spreadsheet=URL, worksheet="events", data=df_events); st.rerun()
 
+# Lösch-Bereich mit Name im Dropdown
 with c3.expander("🗑️ Termin löschen"):
     if not df_events.empty:
-        ev_del_list = df_events.apply(lambda x: f"{x['title']} ({x['date']})", axis=1).tolist()
+        ev_del_list = df_events.apply(lambda x: f"{x['title']} ({x['date']}) - {x['user']}", axis=1).tolist()
         ev_to_del = st.selectbox("Wählen:", ev_del_list, key="del_sel")
         if st.button("Endgültig löschen"):
             df_events = df_events.drop(ev_del_list.index(ev_to_del))
