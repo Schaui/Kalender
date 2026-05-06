@@ -18,6 +18,11 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 def load_data():
     u = conn.read(spreadsheet=URL, worksheet="users")
     e = conn.read(spreadsheet=URL, worksheet="events")
+    
+    if "name" not in u.columns:
+        u = pd.DataFrame(columns=["name", "color"])
+    if "date" not in e.columns:
+        e = pd.DataFrame(columns=["title", "date", "user"])
     return u, e
 
 try:
