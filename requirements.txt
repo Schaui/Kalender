@@ -1,0 +1,4 @@
+streamlit
+holidays
+pandas
+st-gsheets-connection
