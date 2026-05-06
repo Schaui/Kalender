@@ -9,6 +9,14 @@ import requests
 # --- KONFIGURATION ---
 st.set_page_config(page_title="Team Kalender Pro", layout="wide")
 
+st.markdown("""
+    <style>
+    [data-testid="column"] {
+        min-width: 150px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 # HIER DEINE URL EINTRAGEN
 URL = "https://docs.google.com/spreadsheets/d/1pk6k10OKOEeR7JPfOm6AjRiccLTx6Fnh01MitDGEXsE/edit#gid=0"
 
@@ -44,14 +52,26 @@ except:
     df_events = pd.DataFrame(columns=["title", "date", "user"])
 
 # --- SIDEBAR: STEUERUNG ---
-st.sidebar.title("⚙️ Steuerung")
+st.sidebar.title("⚙️ Einstellungen")
 view_mode = st.sidebar.radio("Ansicht:", ["Monat", "Woche", "Jahr", "Liste"])
 
 # Dynamische Jahr- und Monatswahl
 selected_year = st.sidebar.number_input("Jahr wählen:", min_value=2024, max_value=2030, value=date.today().year)
 
 if view_mode == "Monat":
-    selected_month = st.sidebar.slider("Monat wählen:", 1, 12, date.today().month)
+    # Eine Liste der Monatsnamen für die Anzeige erstellen
+    monats_namen = [
+        "Januar", "Februar", "März", "April", "Mai", "Juni",
+        "Juli", "August", "September", "Oktober", "November", "Dezember"
+    ]
+    
+    selected_month = st.sidebar.slider(
+        "Monat wählen:", 
+        min_value=1, 
+        max_value=12, 
+        value=date.today().month,
+        format_func=lambda x: monats_namen[x-1]  # Wandelt 1 in "Januar", 2 in "Februar" etc. um
+    )
 else:
     selected_month = date.today().month
 
@@ -63,13 +83,13 @@ only_national = st.sidebar.checkbox("Nur bundeseinheitliche Feiertage")
 show_ferien = st.sidebar.checkbox("Ferien anzeigen", value=True)
 
 # --- SIDEBAR: USER MANAGEMENT ---
-with st.sidebar.expander("👤 User-Verwaltung"):
-    tab1, tab2, tab3 = st.tabs(["Neu", "Edit", "Löschen"])
+with st.sidebar.expander("👤 Nutzer-Verwaltung"):
+    tab1, tab2, tab3 = st.tabs(["Neu", "Bearbeiten", "Löschen"])
     
     with tab1:
         new_name = st.text_input("Name", key="new_u")
         new_color = st.color_picker("Farbe", "#3498db", key="new_c")
-        if st.button("User speichern"):
+        if st.button("Benutzer erstellen"):
             new_row = pd.DataFrame([{"name": new_name, "color": new_color}])
             updated = pd.concat([df_users, new_row], ignore_index=True)
             conn.update(spreadsheet=URL, worksheet="users", data=updated)
@@ -81,7 +101,7 @@ with st.sidebar.expander("👤 User-Verwaltung"):
             curr_c = df_users[df_users["name"] == u_edit]["color"].values[0]
             new_n_edit = st.text_input("Neuer Name", value=u_edit)
             new_c_edit = st.color_picker("Neue Farbe", value=curr_c)
-            if st.button("Update"):
+            if st.button("Aktualisieren"):
                 df_users.loc[df_users["name"] == u_edit, ["name", "color"]] = [new_n_edit, new_c_edit]
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
                 if new_n_edit != u_edit:
@@ -93,7 +113,7 @@ with st.sidebar.expander("👤 User-Verwaltung"):
         if not df_users.empty:
             u_del = st.selectbox("Löschen:", df_users["name"].tolist(), key="del_u")
             del_ev = st.checkbox("Auch Termine löschen?")
-            if st.button("User entfernen"):
+            if st.button("Benutzer entfernen"):
                 df_users = df_users[df_users["name"] != u_del]
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
                 if del_ev:
