@@ -11,6 +11,7 @@ st.set_page_config(page_title="Team Kalender", layout="wide")
 
 st.markdown("""
     <style>
+    [data-testid="column"] { min-width: 150px; }
     .dot-container { display: flex; justify-content: center; gap: 1px; margin-top: 1px; flex-wrap: wrap; }
     .dot { height: 4px; width: 4px; border-radius: 50%; }
     .event-card {
@@ -20,7 +21,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# Google Sheets URL
+# Google Sheets URL & Verbindung
 URL = "https://docs.google.com/spreadsheets/d/1pk6k10OKOEeR7JPfOm6AjRiccLTx6Fnh01MitDGEXsE/edit#gid=0"
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -33,17 +34,10 @@ LAND_CODE = "SH"
 @st.cache_data(ttl=3600)
 def get_ferien(land_code, jahr):
     try:
-        # Wir versuchen die Daten von ferien-api.de zu laden
         url = f"https://ferien-api.de/api/v1/holidays/{land_code}/{jahr}"
         response = requests.get(url, timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            if not data:
-                return []
-            return data
-    except Exception as e:
-        return []
-    return []
+        return response.json() if response.status_code == 200 else []
+    except: return []
 
 def load_data():
     u = conn.read(spreadsheet=URL, worksheet="users", ttl=5)
@@ -58,18 +52,18 @@ view_mode = st.sidebar.radio("Ansicht:", ["Monat", "Jahr", "Liste"])
 selected_year = st.sidebar.number_input("Jahr:", min_value=2024, max_value=2030, value=date.today().year)
 
 if view_mode == "Monat":
-    selected_month_name = st.sidebar.select_slider("Monat:", options=MONATS_NAMEN, 
-                                                   value=MONATS_NAMEN[date.today().month - 1] if date.today().year == selected_year else "Januar")
+    default_m = MONATS_NAMEN[date.today().month - 1] if date.today().year == selected_year else "Januar"
+    selected_month_name = st.sidebar.select_slider("Monat:", options=MONATS_NAMEN, value=default_m)
     selected_month = MONATS_NAMEN.index(selected_month_name) + 1
 else:
     selected_month = date.today().month
 
-# Toggles
+# Toggles für die Kalenderansichten (Monat/Jahr)
 st.sidebar.subheader("Anzeige Kalender")
 show_hols_cal = st.sidebar.checkbox("Feiertage anzeigen", value=True)
 show_ferien_cal = st.sidebar.checkbox("Ferien anzeigen", value=True)
 
-# Benutzer-Filter
+# Personen-Filter
 st.sidebar.markdown("---")
 visible_users = []
 if not df_users.empty:
@@ -79,44 +73,37 @@ if not df_users.empty:
 
 df_events_filtered = df_events[df_events["user"].isin(visible_users)] if not df_events.empty else df_events
 
-# --- FERIEN & FEIERTAGE LADEN ---
+# --- LOGIK: FEIERTAGS & FERIEN DATEN ---
 de_hols = holidays.Germany(subdiv=LAND_CODE, years=selected_year)
 ferien_daten = get_ferien(LAND_CODE, selected_year)
-
-# Falls keine Ferien gefunden wurden, kleinen Hinweis in Sidebar
-if show_ferien_cal and not ferien_daten:
-    st.sidebar.warning(f"Keine Feriendaten für {selected_year} verfügbar.")
 
 def is_date_in_ferien(d_obj):
     if not show_ferien_cal or not ferien_daten:
         return False, ""
     for f in ferien_daten:
-        try:
-            start = datetime.strptime(f["start"][:10], "%Y-%m-%d").date()
-            end = datetime.strptime(f["end"][:10], "%Y-%m-%d").date()
-            if start <= d_obj <= end:
-                return True, f["name"].split(" ")[0]
-        except: continue
+        start = datetime.strptime(f["start"][:10], "%Y-%m-%d").date()
+        end = datetime.strptime(f["end"][:10], "%Y-%m-%d").date()
+        if start <= d_obj <= end:
+            return True, f["name"].split(" ")[0].capitalize()
     return False, ""
 
-# --- RENDER FUNKTION ---
+# --- RENDER FUNKTION FÜR KALENDERZELLEN ---
 def render_day(d_obj, compact=False):
     h_name = de_hols.get(d_obj) if show_hols_cal else None
     in_f, f_name = is_date_in_ferien(d_obj)
-    
     u_evs = df_events_filtered[df_events_filtered["date"] == str(d_obj)] if not df_events_filtered.empty else pd.DataFrame()
     
-    bg_color = "#3d3d3d" if d_obj == date.today() else "transparent"
-    f_overlay = "rgba(241, 196, 15, 0.25)" if in_f else "transparent"
+    bg_today = "#3d3d3d" if d_obj == date.today() else "transparent"
+    f_ov = "rgba(241, 196, 15, 0.2)" if in_f else "transparent"
     
     if compact:
         dots = ("<div class='dot' style='background:#e74c3c;'></div>" if h_name else "") + \
                "".join([f"<div class='dot' style='background:{df_users[df_users['name']==u]['color'].values[0] if u in df_users['name'].values else '#3498db'};'></div>" for u in u_evs["user"].unique()])
-        return f"<div style='text-align:center; background:{f_overlay}; border-radius:2px;'>{d_obj.day}<div class='dot-container'>{dots}</div></div>"
+        return f"<div style='text-align:center; background:{f_ov}; border-radius:2px;'>{d_obj.day}<div class='dot-container'>{dots}</div></div>"
     
-    html = f"<div style='border:1px solid #555; background-color:{bg_color}; background-image: linear-gradient({f_overlay}, {f_overlay}); padding:5px; min-height:85px; border-radius:5px;'>"
+    html = f"<div style='border:1px solid #555; background-color:{bg_today}; background-image: linear-gradient({f_ov}, {f_ov}); padding:5px; min-height:85px; border-radius:5px;'>"
     html += f"<div style='display:flex; justify-content:space-between;'><b>{d_obj.day}</b>"
-    if in_f: html += f"<span style='color:#f1c40f; font-size:9px;'>{f_name}</span>"
+    if in_f: html += f"<span style='color:#f1c40f; font-size:9px; font-weight:bold;'>{f_name}</span>"
     html += "</div>"
     if h_name: html += f"<div style='background:#e74c3c; color:white; padding:2px; font-size:8px; border-radius:3px; margin-top:2px;'>{h_name}</div>"
     for _, row in u_evs.iterrows():
@@ -127,6 +114,7 @@ def render_day(d_obj, compact=False):
 # --- HAUPTANSICHT ---
 st.title(f"📅 Team-Kalender {selected_year}")
 
+# Monat / Jahr / Liste Logik
 if view_mode == "Monat":
     cols = st.columns(7)
     for i, d in enumerate(WOCHENTAGE): cols[i].write(f"**{d}**")
@@ -147,44 +135,55 @@ elif view_mode == "Jahr":
                     d_cols = st.columns(7)
                     for i, day in enumerate(week):
                         if day != 0: d_cols[i].markdown(render_day(date(selected_year, m, day), True), unsafe_allow_html=True)
+                st.write("---")
 
 else:
     st.subheader("📋 Liste")
-    c1, c2 = st.columns(2)
-    show_h_l = c1.toggle("Feiertage", value=True)
-    show_f_l = c2.toggle("Ferien", value=True)
+    # Separate Toggles für die Liste
+    lt1, lt2 = st.columns(2)
+    show_h_l = lt1.toggle("Feiertage einblenden", value=True)
+    show_f_l = lt2.toggle("Ferien einblenden", value=True)
     
     items = []
-    # Termine
+    # 1. Termine
     if not df_events_filtered.empty:
         for _, r in df_events_filtered.iterrows():
-            items.append({"d": datetime.strptime(r["date"], "%Y-%m-%d").date(), "t": r["title"], "u": r["user"], "type": "ev"})
-    # Feiertage
+            items.append({"d": datetime.strptime(r["date"], "%Y-%m-%d").date(), "t": r["title"], "u": r["user"], "type": "ev", "info": ""})
+    # 2. Feiertage
     if show_h_l:
         for d, n in de_hols.items():
-            if d.year == selected_year: items.append({"d": d, "t": n, "u": "Feiertag", "type": "hol"})
-    # Ferien
+            if d.year == selected_year: items.append({"d": d, "t": n, "u": "Feiertag", "type": "hol", "info": ""})
+    # 3. Ferien
     if show_f_l and ferien_daten:
         for f in ferien_daten:
             s = datetime.strptime(f["start"][:10], "%Y-%m-%d").date()
-            items.append({"d": s, "t": f"{f['name']} (Beginn)", "u": "Ferien", "type": "fer"})
+            e = datetime.strptime(f["end"][:10], "%Y-%m-%d").date()
+            items.append({
+                "d": s, 
+                "t": f["name"].split(" ")[0].capitalize(), 
+                "u": "Ferien", 
+                "type": "fer", 
+                "info": f"{s.strftime('%d.%m.')} – {e.strftime('%d.%m.')}"
+            })
             
     if not items:
         st.info("Keine Einträge.")
     else:
         for item in sorted(items, key=lambda x: x["d"]):
             if item["type"] == "ev":
-                bc, bg, lc = (df_users[df_users["name"]==item["u"]]["color"].values[0] if item["u"] in df_users["name"].values else "#3498db"), "#262730", (df_users[df_users["name"]==item["u"]]["color"].values[0] if item["u"] in df_users["name"].values else "#3498db")
+                u_c = df_users[df_users["name"]==item["u"]]["color"].values[0] if item["u"] in df_users["name"].values else "#3498db"
+                bc, bg, lc = u_c, "#262730", u_c
             elif item["type"] == "hol": bc, bg, lc = "#e74c3c", "#4d1a1a", "#e74c3c"
             else: bc, bg, lc = "#f1c40f", "#3d3516", "#f1c40f"
             
+            info_text = f"<div style='color:#f1c40f; font-size:0.85rem;'>{item['info']}</div>" if item['info'] else ""
             st.markdown(f"""
                 <div class="event-card" style="border-left: 5px solid {bc}; background-color: {bg}; padding: 10px 15px;">
-                    <div><small style="color: #aaa;">{item['d'].strftime('%d.%m.%Y')}</small><br><b>{item['t']}</b></div>
-                    <div style="background:{lc}; color:white; padding:2px 10px; border-radius:15px; font-size:11px;">{item['u']}</div>
+                    <div><small style="color: #aaa;">{item['d'].strftime('%d.%m.%Y')}</small><br><b>{item['t']}</b>{info_text}</div>
+                    <div style="background:{lc}; color:white; padding:4px 12px; border-radius:15px; font-size:11px; font-weight:bold;">{item['u']}</div>
                 </div>
             """, unsafe_allow_html=True)
 
-# Expander für Verwaltung am Ende
-with st.sidebar.expander("🛠️ Verwaltung"):
-    st.write("Hier Nutzer/Events pflegen (siehe vorherige Versionen)")
+# Nutzer/Event Verwaltung in der Sidebar ganz unten
+with st.sidebar.expander("🛠️ Daten-Verwaltung"):
+    st.info("Nutzer und Events können hier bearbeitet werden (Logik wie zuvor).")
