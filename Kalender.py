@@ -9,7 +9,7 @@ import calendar
 st.set_page_config(page_title="Team Kalender", layout="wide")
 
 # HIER DEINE URL EINTRAGEN
-URL = https://docs.google.com/spreadsheets/d/1pk6k10OKOEeR7JPfOm6AjRiccLTx6Fnh01MitDGEXsE/edit?gid=0#gid=0
+URL = "https://docs.google.com/spreadsheets/d/1pk6k10OKOEeR7JPfOm6AjRiccLTx6Fnh01MitDGEXsE/edit?gid=0#gid=0"
 
 # Verbindung aufbauen
 conn = st.connection("gsheets", type=GSheetsConnection)
