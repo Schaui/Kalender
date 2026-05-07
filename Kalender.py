@@ -230,23 +230,46 @@ else: # LISTE
 st.sidebar.markdown("---")
 with st.sidebar.expander("👤 Nutzer verwalten"):
     t1, t2, t3 = st.tabs(["Neu", "Bearbeiten", "Löschen"])
+    
     with t1:
-        nu, nc = st.text_input("Name", key="nu"), st.color_picker("Farbe", "#3498db", key="nc")
+        nu = st.text_input("Name", key="nu_input").strip() # .strip() entfernt versehentliche Leerzeichen
+        nc = st.color_picker("Farbe", "#3498db", key="nc_input")
+        
         if st.button("Hinzufügen"):
             if nu:
-                df_users = pd.concat([df_users, pd.DataFrame([{"name": nu, "color": nc}])], ignore_index=True)
-                conn.update(spreadsheet=URL, worksheet="users", data=df_users); st.cache_data.clear(); st.rerun()
+                # PRÜFUNG: Existiert der Name schon (Groß-/Kleinschreibung ignorieren)?
+                existing_names = [name.lower() for name in df_users["name"].tolist()]
+                
+                if nu.lower() in existing_names:
+                    st.error(f"Nutzer '{nu}' existiert bereits!")
+                else:
+                    new_user = pd.DataFrame([{"name": nu, "color": nc}])
+                    df_users = pd.concat([df_users, new_user], ignore_index=True)
+                    conn.update(spreadsheet=URL, worksheet="users", data=df_users)
+                    st.cache_data.clear()
+                    st.success(f"{nu} wurde angelegt.")
+                    st.rerun()
+            else:
+                st.warning("Bitte einen Namen eingeben.")
+
     with t2:
         if not df_users.empty:
-            u_e = st.selectbox("Nutzer", df_users["name"].tolist(), key="ue")
+            u_e = st.selectbox("Nutzer wählen", df_users["name"].tolist(), key="ue_select")
             idx = df_users[df_users["name"] == u_e].index[0]
-            new_c = st.color_picker("Farbe", df_users.at[idx, "color"], key="nec")
+            new_c = st.color_picker("Neue Farbe", df_users.at[idx, "color"], key="nec_picker")
+            
             if st.button("Aktualisieren"):
                 df_users.at[idx, "color"] = new_c
-                conn.update(spreadsheet=URL, worksheet="users", data=df_users); st.cache_data.clear(); st.rerun()
+                conn.update(spreadsheet=URL, worksheet="users", data=df_users)
+                st.cache_data.clear()
+                st.rerun()
+
     with t3:
         if not df_users.empty:
-            u_d = st.selectbox("Löschen", df_users["name"].tolist(), key="du")
-            if st.button("Entfernen"):
+            u_d = st.selectbox("Löschen", df_users["name"].tolist(), key="du_select")
+            if st.button("Benutzer unwiderruflich löschen", type="primary"):
                 df_users = df_users[df_users["name"] != u_d]
-                conn.update(spreadsheet=URL, worksheet="users", data=df_users); st.cache_data.clear(); st.rerun()
+                conn.update(spreadsheet=URL, worksheet="users", data=df_users)
+                # Optional: Hier könnte man auch alle Events dieses Nutzers löschen
+                st.cache_data.clear()
+                st.rerun()
