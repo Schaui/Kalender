@@ -23,7 +23,7 @@ MONATS_NAMEN = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "A
 WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 LAND_CODE = "SH" 
 
-# --- DATEN-LOGIK ---
+# --- DATEN-LOGIK (LADEN) ---
 def load_data():
     try:
         u = conn.read(spreadsheet=URL, worksheet="users", ttl=0)
@@ -41,7 +41,7 @@ def get_ferien(land_code, jahr):
 
 df_users, df_events = load_data()
 
-# Hilfsfunktion für gruppierte Auswahl (Blöcke statt Einzeltage)
+# Hilfsfunktion für gruppierte Auswahl & Listenansicht (Blöcke erkennen)
 def get_grouped_event_list(df):
     if df.empty: return [], []
     df_g = df.copy()
@@ -60,7 +60,7 @@ def get_grouped_event_list(df):
                 if i < len(dates): start = dates[i]
     return display_list, data_refs
 
-# --- SIDEBAR ---
+# --- SIDEBAR EINSTELLUNGEN ---
 st.sidebar.title("⚙️ Einstellungen")
 view_mode = st.sidebar.radio("Ansicht:", ["Monat", "Jahr", "Liste"])
 selected_year = st.sidebar.number_input("Jahr:", min_value=2024, max_value=2030, value=date.today().year)
@@ -85,7 +85,7 @@ if not df_users.empty:
 
 df_ev_filt = df_events[df_events["user"].isin(visible_users)] if not df_events.empty else df_events
 
-# --- KALENDER LOGIK ---
+# --- KALENDER LOGIK (FEIERTAGE & FERIEN) ---
 de_hols = holidays.Germany(subdiv=LAND_CODE, years=selected_year)
 ferien_daten = get_ferien(LAND_CODE, selected_year)
 
@@ -93,8 +93,9 @@ def is_ferien(d):
     if not show_ferien: return False, ""
     for f in ferien_daten:
         try:
-            if datetime.strptime(f["start"][:10], "%Y-%m-%d").date() <= d <= datetime.strptime(f["end"][:10], "%Y-%m-%d").date():
-                return True, f["name"].split(" ")[0].capitalize()
+            s_f = datetime.strptime(f["start"][:10], "%Y-%m-%d").date()
+            e_f = datetime.strptime(f["end"][:10], "%Y-%m-%d").date()
+            if s_f <= d <= e_f: return True, f["name"].split(" ")[0].capitalize()
         except: continue
     return False, ""
 
@@ -112,12 +113,12 @@ def render_day(d_obj, compact=False):
     
     html = f"<div style='border:1px solid #555; background:{bg}; background-image:linear-gradient({f_c},{f_c}); padding:5px; min-height:85px; border-radius:5px;'>"
     html += f"<div style='display:flex; justify-content:space-between;'><b>{d_obj.day}</b>"
-    if in_f: html += f"<span style='color:#f1c40f; font-size:9px;'>{f_n}</span>"
+    if in_f: html += f"<span style='color:#f1c40f; font-size:10px;'>{f_n}</span>"
     html += "</div>"
-    if h_name: html += f"<div style='background:#e74c3c; color:white; padding:2px; font-size:8px; border-radius:3px; margin-top:2px;'>{h_name}</div>"
+    if h_name: html += f"<div style='background:#e74c3c; color:white; padding:2px; font-size:10px; border-radius:3px; margin-top:2px; line-height:1.1;'>{h_name}</div>"
     for _, r in u_evs.iterrows():
         c = df_users[df_users["name"]==r['user']]["color"].values[0] if r['user'] in df_users["name"].values else "#555"
-        html += f"<div style='background:{c}; color:white; padding:2px; margin-top:2px; font-size:9px; border-radius:3px;'>{r['title']}</div>"
+        html += f"<div style='background:{c}; color:white; padding:3px; margin-top:3px; font-size:12px; font-weight:bold; border-radius:3px; line-height:1.2; text-align:center;'>{r['title']}</div>"
     return html + "</div>"
 
 # --- MANAGEMENT BEREICH ---
@@ -127,7 +128,7 @@ display_options, ref_data = get_grouped_event_list(df_events)
 
 with c1.expander("➕ Neuer Eintrag"):
     with st.form("add", clear_on_submit=True):
-        t = st.text_input("Titel")
+        t = st.text_input("Was steht an? (Titel)")
         colA, colB = st.columns(2)
         d_s, d_e = colA.date_input("Von", date.today()), colB.date_input("Bis", date.today())
         u = st.selectbox("Wer?", df_users["name"].tolist() if not df_users.empty else [])
@@ -136,33 +137,32 @@ with c1.expander("➕ Neuer Eintrag"):
                 new = [{"title": t, "date": str(d_s + timedelta(days=i)), "user": u} for i in range((d_e - d_s).days + 1)]
                 df_events = pd.concat([df_events, pd.DataFrame(new)], ignore_index=True)
                 conn.update(spreadsheet=URL, worksheet="events", data=df_events)
-                st.cache_data.clear()
-                st.rerun()
+                st.cache_data.clear(); st.rerun()
+            elif d_s > d_e: st.error("Fehler: 'Bis' muss nach 'Von' liegen.")
 
 with c2.expander("✏️ Bearbeiten"):
     if display_options:
-        sel = st.selectbox("Block wählen", range(len(display_options)), format_func=lambda x: display_options[x], key="e_s")
+        sel = st.selectbox("Block wählen", range(len(display_options)), format_func=lambda x: display_options[x], key="edit_sel_block")
         ref = ref_data[sel]
-        with st.form("edit"):
+        with st.form("edit_form_block"):
             nt = st.text_input("Titel ändern", ref["title"])
             nu = st.selectbox("Nutzer ändern", df_users["name"].tolist(), index=df_users["name"].tolist().index(ref["user"]) if ref["user"] in df_users["name"].values else 0)
+            st.info(f"Ändert den Block vom {ref['start'].strftime('%d.%m.')} bis {ref['end'].strftime('%d.%m.')}")
             if st.form_submit_button("Speichern"):
                 mask = (df_events["title"] == ref["title"]) & (df_events["user"] == ref["user"]) & (pd.to_datetime(df_events["date"]).dt.date >= ref["start"]) & (pd.to_datetime(df_events["date"]).dt.date <= ref["end"])
                 df_events.loc[mask, "title"], df_events.loc[mask, "user"] = nt, nu
                 conn.update(spreadsheet=URL, worksheet="events", data=df_events)
-                st.cache_data.clear()
-                st.rerun()
+                st.cache_data.clear(); st.rerun()
 
 with c3.expander("🗑️ Löschen"):
     if display_options:
-        idx_d = st.selectbox("Block wählen", range(len(display_options)), format_func=lambda x: display_options[x], key="d_s")
+        idx_d = st.selectbox("Block wählen", range(len(display_options)), format_func=lambda x: display_options[x], key="del_sel_block")
         if st.button("Gesamten Block löschen", type="primary"):
             rd = ref_data[idx_d]
             mask = (df_events["title"] == rd["title"]) & (df_events["user"] == rd["user"]) & (pd.to_datetime(df_events["date"]).dt.date >= rd["start"]) & (pd.to_datetime(df_events["date"]).dt.date <= rd["end"])
             df_events = df_events[~mask]
             conn.update(spreadsheet=URL, worksheet="events", data=df_events)
-            st.cache_data.clear()
-            st.rerun()
+            st.cache_data.clear(); st.rerun()
 
 # --- ANSICHTEN RENDERN ---
 if view_mode == "Monat":
@@ -186,8 +186,8 @@ elif view_mode == "Jahr":
 else: # Liste
     st.subheader("📋 Übersicht")
     l_items = []
-    disp, refs = get_grouped_event_list(df_ev_filt)
-    for i, r in enumerate(refs): l_items.append({"d": r["start"], "t": r["title"], "u": r["user"], "type": "ev", "info": f"{r['start'].strftime('%d.%m.')} - {r['end'].strftime('%d.%m.')}" if r['start']!=r['end'] else ""})
+    _, refs = get_grouped_event_list(df_ev_filt)
+    for r in refs: l_items.append({"d": r["start"], "t": r["title"], "u": r["user"], "type": "ev", "info": f"{r['start'].strftime('%d.%m.')} - {r['end'].strftime('%d.%m.')}" if r['start']!=r['end'] else ""})
     if show_hols:
         for d, n in de_hols.items():
             if d.year == selected_year: l_items.append({"d": d, "t": n, "u": "Feiertag", "type": "hol", "info": ""})
@@ -198,31 +198,28 @@ else: # Liste
 # --- NUTZER VERWALTUNG (SIDEBAR) ---
 st.sidebar.markdown("---")
 with st.sidebar.expander("👤 Nutzer verwalten"):
-    tab1, tab2, tab3 = st.tabs(["Neu", "Bearbeiten", "Löschen"])
+    tab1, tab2, tab3 = st.tabs(["Neu", "Aktualisieren", "Löschen"])
     with tab1:
-        nu = st.text_input("Name", key="new_u")
-        nc = st.color_picker("Farbe", "#3498db", key="new_c")
+        nu = st.text_input("Name", key="nu_new")
+        nc = st.color_picker("Farbe", "#3498db", key="nc_new")
         if st.button("Hinzufügen"):
             if nu:
                 df_users = pd.concat([df_users, pd.DataFrame([{"name": nu, "color": nc}])], ignore_index=True)
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
-                st.cache_data.clear()
-                st.rerun()
+                st.cache_data.clear(); st.rerun()
     with tab2:
         if not df_users.empty:
-            u_edit = st.selectbox("Nutzer", df_users["name"].tolist(), key="u_edit_sel")
-            u_idx = df_users[df_users["name"] == u_edit].index[0]
-            new_c_val = st.color_picker("Farbe ändern", df_users.at[u_idx, "color"], key="u_edit_col")
+            u_e = st.selectbox("Nutzer wählen", df_users["name"].tolist(), key="ue_edit")
+            idx = df_users[df_users["name"] == u_e].index[0]
+            new_c = st.color_picker("Farbe ändern", df_users.at[idx, "color"], key="ne_color")
             if st.button("Aktualisieren"):
-                df_users.at[u_idx, "color"] = new_c_val
+                df_users.at[idx, "color"] = new_c
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
-                st.cache_data.clear()
-                st.rerun()
+                st.cache_data.clear(); st.rerun()
     with tab3:
         if not df_users.empty:
-            u_del = st.selectbox("Nutzer entfernen", df_users["name"].tolist(), key="u_del_sel")
+            u_d = st.selectbox("Nutzer entfernen", df_users["name"].tolist(), key="ud_del")
             if st.button("Löschen"):
-                df_users = df_users[df_users["name"] != u_del]
+                df_users = df_users[df_users["name"] != u_d]
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
-                st.cache_data.clear()
-                st.rerun()
+                st.cache_data.clear(); st.rerun()
