@@ -237,7 +237,7 @@ else: # Liste
 # --- BENUTZER VERWALTUNG (SIDEBAR) ---
 st.sidebar.markdown("---")
 with st.sidebar.expander("👤 Nutzer verwalten"):
-    tab1, tab2, tab3 = st.tabs(["Neu", "Farbe", "Löschen"])
+    tab1, tab2, tab3 = st.tabs(["Neu", "Bearbeiten", "Löschen"])
     with tab1:
         nu = st.text_input("Name", key="new_u_name")
         nc = st.color_picker("Farbe", "#3498db", key="new_u_color")
@@ -251,7 +251,7 @@ with st.sidebar.expander("👤 Nutzer verwalten"):
             edit_u = st.selectbox("Nutzer wählen", df_users["name"].tolist(), key="edit_u_sel")
             u_idx = df_users[df_users["name"] == edit_u].index[0]
             new_c_val = st.color_picker("Neue Farbe", df_users.at[u_idx, "color"], key="edit_u_color")
-            if st.button("Farbe aktualisieren"):
+            if st.button("Aktualisieren"):
                 df_users.at[u_idx, "color"] = new_c_val
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
                 st.rerun()
