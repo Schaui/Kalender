@@ -30,9 +30,14 @@ URL = "https://docs.google.com/spreadsheets/d/1pk6k10OKOEeR7JPfOm6AjRiccLTx6Fnh0
 conn = st.connection("gsheets", type=GSheetsConnection)
 MONATS_NAMEN = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
 WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
-LAND_CODE = "SH" # Schleswig-Holstein
+LAND_CODE = "SH" 
 
 calendar.setfirstweekday(calendar.MONDAY)
+
+# --- FARB-DEFINITIONEN (DEZENT) ---
+COLOR_FERIEN_BG = "rgba(254, 249, 231, 0.4)" # Sehr sanftes Creme
+COLOR_FERIEN_BORDER = "#F9E79F"             # Milder Goldton
+COLOR_FERIEN_TEXT = "#9A7D0A"               # Dunklerer Goldton für Text/Etikett
 
 def load_data():
     try:
@@ -44,7 +49,6 @@ def load_data():
 
 @st.cache_data(ttl=3600)
 def get_ferien(land_code, jahr):
-    # Wechsel zu OpenHolidays API (DE-SH für Schleswig-Holstein)
     try:
         url = f"https://openholidaysapi.org/SchoolHolidays?countryIsoCode=DE&subdivisionCode=DE-{land_code}&validFrom={jahr}-01-01&validTo={jahr}-12-31"
         r = requests.get(url, timeout=5)
@@ -69,11 +73,7 @@ st.sidebar.subheader("Anzeige")
 show_hols = st.sidebar.checkbox("Feiertage 🔴", value=True)
 show_ferien = st.sidebar.checkbox("Ferien 🟡", value=True)
 
-# Ferien-Status Check
 ferien_daten = get_ferien(LAND_CODE, selected_year)
-if show_ferien:
-    if not ferien_daten: st.sidebar.warning("⚠️ Keine Ferien-Daten (API)")
-    else: st.sidebar.success(f"✅ {len(ferien_daten)} Ferien-Zeiträume")
 
 st.sidebar.markdown("---")
 visible_users = []
@@ -93,11 +93,9 @@ def get_ferien_info(d):
     if not show_ferien or not ferien_daten: return False, ""
     for f in ferien_daten:
         try:
-            # OpenHolidays nutzt startDate und endDate
             s = datetime.strptime(f["startDate"], "%Y-%m-%d").date()
             e = datetime.strptime(f["endDate"], "%Y-%m-%d").date()
             if s <= d <= e:
-                # Name ist bei dieser API eine Liste von Übersetzungen
                 name = f.get("name", [{"text": "Ferien"}])[0]["text"]
                 return True, name.split(" ")[0].capitalize()
         except: continue
@@ -109,9 +107,9 @@ def render_day(d_obj, compact=False):
     u_evs = df_ev_filt[df_ev_filt["date"] == str(d_obj)] if not df_ev_filt.empty else pd.DataFrame()
     
     is_today = d_obj == date.today()
-    bg = "rgba(255, 255, 255, 0.1)" if is_today else "transparent"
-    ferien_bg = "rgba(241, 196, 15, 0.25)" if is_f else "transparent"
-    border_color = "#f1c40f" if is_f else "#555"
+    bg = "rgba(255, 255, 255, 0.08)" if is_today else "transparent"
+    ferien_bg = COLOR_FERIEN_BG if is_f else "transparent"
+    border_color = COLOR_FERIEN_BORDER if is_f else "#444"
     
     if compact:
         f_style = f"background:{ferien_bg}; border-radius:2px;" if is_f else ""
@@ -119,9 +117,9 @@ def render_day(d_obj, compact=False):
         dots += "".join([f"<div class='dot' style='background:{df_users[df_users['name']==u]['color'].values[0] if u in df_users['name'].values else '#3498db'};'></div>" for u in u_evs["user"].unique()])
         return f"<div style='text-align:center; {f_style}'>{d_obj.day}<div class='dot-container'>{dots}</div></div>"
     
-    html = f"<div style='border:1px solid {border_color}; border-top: 4px solid {border_color}; background-color:{bg}; background-image: linear-gradient({ferien_bg}, {ferien_bg}); padding:5px; min-height:85px; border-radius:5px;'>"
+    html = f"<div style='border:1px solid {border_color}; border-top: 3px solid {border_color}; background-color:{bg}; background-image: linear-gradient({ferien_bg}, {ferien_bg}); padding:5px; min-height:85px; border-radius:5px;'>"
     html += f"<div style='display:flex; justify-content:space-between; align-items:center;'><b style='font-size:14px;'>{d_obj.day}</b>"
-    if is_f: html += f"<span style='background:#f1c40f; color:black; font-size:9px; font-weight:bold; padding:1px 4px; border-radius:3px;'>{f_name}</span>"
+    if is_f: html += f"<span style='background:{COLOR_FERIEN_BORDER}; color:{COLOR_FERIEN_TEXT}; font-size:9px; font-weight:bold; padding:1px 4px; border-radius:3px;'>{f_name}</span>"
     html += "</div>"
     
     if h_name: html += f"<div style='background:#e74c3c; color:white; padding:2px; font-size:10px; border-radius:3px; margin-top:2px;'>{h_name}</div>"
@@ -229,8 +227,8 @@ else: # LISTE
     for item in sorted(l_items, key=lambda x: x["d"]):
         if item["type"] == "ev": c = df_users[df_users["name"]==item["u"]]["color"].values[0] if item["u"] in df_users["name"].values else "#3498db"
         elif item["type"] == "hol": c = "#e74c3c"
-        else: c = "#f1c40f"
-        st.markdown(f'<div class="event-card" style="border-left:5px solid {c}; background:#262730; padding:10px;"><div><small>{item["d"].strftime("%d.%m.%Y")}</small><br><b>{item["t"]}</b><br><small style="color:#aaa">{item["info"]}</small></div><div style="background:{c}; color:white; padding:3px 10px; border-radius:12px; font-size:10px; font-weight:bold;">{item["u"]}</div></div>', unsafe_allow_html=True)
+        else: c = COLOR_FERIEN_BORDER
+        st.markdown(f'<div class="event-card" style="border-left:5px solid {c}; background:#262730; padding:10px;"><div><small>{item["d"].strftime("%d.%m.%Y")}</small><br><b>{item["t"]}</b><br><small style="color:#aaa">{item["info"]}</small></div><div style="background:{c}; color:{COLOR_FERIEN_TEXT if item["type"]=="fer" else "white"}; padding:3px 10px; border-radius:12px; font-size:10px; font-weight:bold;">{item["u"]}</div></div>', unsafe_allow_html=True)
 
 # --- 8. NUTZER VERWALTUNG ---
 st.sidebar.markdown("---")
