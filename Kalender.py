@@ -21,9 +21,16 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- 2. LOGO ---
+# Direkter Raw-Link ist stabiler als der Umweg über github.com/blob/...
+LOGO_URL = "https://raw.githubusercontent.com/Schaui/Kalender/main/Gemini_Generated_Image_cn6fltcn6fltcn6f.png"
+
 col_l1, col_l2, col_l3 = st.columns([1, 1, 1])
 with col_l2:
-    st.image("https://github.com/Schaui/Kalender/blob/main/Gemini_Generated_Image_cn6fltcn6fltcn6f.png?raw=true", use_container_width=True)
+    try:
+        st.image(LOGO_URL, use_container_width=True)
+    except Exception:
+        # Falls das Bild nicht geladen werden kann, wird kein Fehler angezeigt
+        st.write("🏗️ **Team Kalender**")
 
 # --- 3. DATEN & VERBINDUNG ---
 URL = "https://docs.google.com/spreadsheets/d/1pk6k10OKOEeR7JPfOm6AjRiccLTx6Fnh01MitDGEXsE/edit#gid=0"
