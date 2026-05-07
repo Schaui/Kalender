@@ -7,7 +7,7 @@ import calendar
 import requests
 
 # --- 1. KONFIGURATION & STYLING ---
-st.set_page_config(page_title="Team Kalender Pro", layout="wide")
+st.set_page_config(page_title="Team Kalender", layout="wide")
 
 st.markdown("""
     <style>
@@ -57,7 +57,7 @@ df_users, df_events = load_data()
 
 # --- 4. SIDEBAR ---
 st.sidebar.title("⚙️ Einstellungen")
-if st.sidebar.button("🔄 Daten & Cache neu laden"):
+if st.sidebar.button("🔄 Neu laden"):
     st.cache_data.clear()
     st.rerun()
 
@@ -235,7 +235,7 @@ else: # LISTE
 # --- 8. NUTZER VERWALTUNG ---
 st.sidebar.markdown("---")
 with st.sidebar.expander("👤 Nutzer verwalten"):
-    t1, t2, t3 = st.tabs(["Neu", "Farbe", "Löschen"])
+    t1, t2, t3 = st.tabs(["Neu", "Bearbeiten", "Löschen"])
     with t1:
         nu = st.text_input("Name", key="nu_new").strip()
         nc = st.color_picker("Farbe", "#3498db", key="nc_new")
