@@ -199,6 +199,8 @@ elif view_mode == "Jahr":
 else: # Liste (Komprimiert)
     st.subheader("📋 Komprimierte Übersicht")
     items = []
+    
+    # 1. Termine verarbeiten
     if not df_events_filtered.empty:
         df_sorted = df_events_filtered.copy()
         df_sorted["date"] = pd.to_datetime(df_sorted["date"]).dt.date
@@ -213,20 +215,38 @@ else: # Liste (Komprimiert)
                     items.append({"d": start, "t": title, "u": user, "type": "ev", "info": info})
                     if i < len(dates): start = dates[i]
     
+    # 2. Feiertage hinzufügen
     if st.sidebar.checkbox("Feiertage in Liste", True):
         for d, n in de_hols.items():
-            if d.year == selected_year: items.append({"d": d, "t": n, "u": "Feiertag", "type": "hol", "info": ""})
+            if d.year == selected_year:
+                items.append({"d": d, "t": n, "u": "Feiertag", "type": "hol", "info": ""})
+                
+    # 3. Ferien hinzufügen
+    if st.sidebar.checkbox("Ferien in Liste", True) and ferien_daten:
+        for f in ferien_daten:
+            try:
+                s = datetime.strptime(f["start"][:10], "%Y-%m-%d").date()
+                e = datetime.strptime(f["end"][:10], "%Y-%m-%d").date()
+                if s.year == selected_year:
+                    items.append({"d": s, "t": f["name"].split(" ")[0].capitalize() + "ferien", "u": "Ferien", "type": "fer", "info": f"{s.strftime('%d.%m.')} – {e.strftime('%d.%m.')}"})
+            except: continue
+
+    if not items:
+        st.info("Keine Einträge.")
+    else:
+        for item in sorted(items, key=lambda x: x["d"]):
+            if item["type"] == "ev":
+                u_c = df_users[df_users["name"]==item["u"]]["color"].values[0] if item["u"] in df_users["name"].values else "#3498db"
+                bg = "#262730"
+            elif item["type"] == "hol": u_c, bg = "#e74c3c", "#4d1a1a"
+            else: u_c, bg = "#f1c40f", "#3d3516"
             
-    for item in sorted(items, key=lambda x: x["d"]):
-        u_c = df_users[df_users["name"]==item["u"]]["color"].values[0] if item["type"]=="ev" and item["u"] in df_users["name"].values else ("#e74c3c" if item["type"]=="hol" else "#f1c40f")
-        bg = "#262730" if item["type"]=="ev" else ("#4d1a1a" if item["type"]=="hol" else "#3d3516")
-        st.markdown(f'<div class="event-card" style="border-left:5px solid {u_c}; background:{bg}; padding:10px;"><div><small>{item["d"].strftime("%d.%m.%Y")}</small><br><b>{item["t"]}</b><br><small style="color:#f1c40f">{item["info"]}</small></div><div style="background:{u_c}; color:white; padding:3px 10px; border-radius:12px; font-size:10px;">{item["u"]}</div></div>', unsafe_allow_html=True)
+            st.markdown(f'''<div class="event-card" style="border-left:5px solid {u_c}; background:{bg}; padding:10px;"><div><small>{item["d"].strftime("%d.%m.%Y")}</small><br><b>{item["t"]}</b><br><small style="color:#f1c40f">{item["info"]}</small></div><div style="background:{u_c}; color:white; padding:3px 10px; border-radius:12px; font-size:10px; font-weight:bold;">{item["u"]}</div></div>''', unsafe_allow_html=True)
 
 # --- BENUTZER VERWALTUNG (SIDEBAR) ---
 st.sidebar.markdown("---")
 with st.sidebar.expander("👤 Benutzer-Verwaltung"):
-    tab1, tab2, tab3 = st.tabs(["Neu", "Farbe", "Löschen"])
-    
+    tab1, tab2, tab3 = st.tabs(["Neu", "Bearbeiten", "Löschen"])
     with tab1:
         nu = st.text_input("Name", key="new_u_name")
         nc = st.color_picker("Farbe", "#3498db", key="new_u_color")
@@ -235,17 +255,15 @@ with st.sidebar.expander("👤 Benutzer-Verwaltung"):
                 df_users = pd.concat([df_users, pd.DataFrame([{"name": nu, "color": nc}])], ignore_index=True)
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
                 st.rerun()
-
     with tab2:
         if not df_users.empty:
             edit_u = st.selectbox("Nutzer wählen", df_users["name"].tolist(), key="edit_u_sel")
             u_idx = df_users[df_users["name"] == edit_u].index[0]
             new_c_val = st.color_picker("Neue Farbe", df_users.at[u_idx, "color"], key="edit_u_color")
-            if st.button("Farbe speichern"):
+            if st.button("Änderung speichern"):
                 df_users.at[u_idx, "color"] = new_c_val
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
                 st.rerun()
-
     with tab3:
         if not df_users.empty:
             del_u = st.selectbox("Nutzer entfernen", df_users["name"].tolist(), key="del_u_sel")
