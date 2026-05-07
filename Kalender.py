@@ -30,7 +30,7 @@ URL = "https://docs.google.com/spreadsheets/d/1pk6k10OKOEeR7JPfOm6AjRiccLTx6Fnh0
 conn = st.connection("gsheets", type=GSheetsConnection)
 MONATS_NAMEN = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
 WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
-LAND_CODE = "SH" 
+LAND_CODE = "SH" # Schleswig-Holstein
 
 calendar.setfirstweekday(calendar.MONDAY)
 
@@ -44,8 +44,10 @@ def load_data():
 
 @st.cache_data(ttl=3600)
 def get_ferien(land_code, jahr):
+    # Wechsel zu OpenHolidays API (DE-SH für Schleswig-Holstein)
     try:
-        r = requests.get(f"https://ferien-api.de/api/v1/holidays/{land_code}/{jahr}", timeout=5)
+        url = f"https://openholidaysapi.org/SchoolHolidays?countryIsoCode=DE&subdivisionCode=DE-{land_code}&validFrom={jahr}-01-01&validTo={jahr}-12-31"
+        r = requests.get(url, timeout=5)
         if r.status_code == 200:
             return r.json()
     except: pass
@@ -55,7 +57,7 @@ df_users, df_events = load_data()
 
 # --- 4. SIDEBAR ---
 st.sidebar.title("⚙️ Einstellungen")
-if st.sidebar.button("🔄 Neu laden"):
+if st.sidebar.button("🔄 Daten & Cache neu laden"):
     st.cache_data.clear()
     st.rerun()
 
@@ -67,11 +69,11 @@ st.sidebar.subheader("Anzeige")
 show_hols = st.sidebar.checkbox("Feiertage 🔴", value=True)
 show_ferien = st.sidebar.checkbox("Ferien 🟡", value=True)
 
-# Ferien Diagnose in Sidebar
+# Ferien-Status Check
 ferien_daten = get_ferien(LAND_CODE, selected_year)
 if show_ferien:
-    if not ferien_daten: st.sidebar.error("❌ Ferien-API offline")
-    else: st.sidebar.success(f"✅ {len(ferien_daten)} Ferien geladen")
+    if not ferien_daten: st.sidebar.warning("⚠️ Keine Ferien-Daten (API)")
+    else: st.sidebar.success(f"✅ {len(ferien_daten)} Ferien-Zeiträume")
 
 st.sidebar.markdown("---")
 visible_users = []
@@ -91,10 +93,13 @@ def get_ferien_info(d):
     if not show_ferien or not ferien_daten: return False, ""
     for f in ferien_daten:
         try:
-            s = datetime.strptime(f["start"][:10], "%Y-%m-%d").date()
-            e = datetime.strptime(f["end"][:10], "%Y-%m-%d").date()
+            # OpenHolidays nutzt startDate und endDate
+            s = datetime.strptime(f["startDate"], "%Y-%m-%d").date()
+            e = datetime.strptime(f["endDate"], "%Y-%m-%d").date()
             if s <= d <= e:
-                return True, f["name"].split(" ")[0].capitalize()
+                # Name ist bei dieser API eine Liste von Übersetzungen
+                name = f.get("name", [{"text": "Ferien"}])[0]["text"]
+                return True, name.split(" ")[0].capitalize()
         except: continue
     return False, ""
 
@@ -216,8 +221,10 @@ else: # LISTE
     if show_ferien and ferien_daten:
         for f in ferien_daten:
             try:
-                s_f, e_f = datetime.strptime(f["start"][:10], "%Y-%m-%d").date(), datetime.strptime(f["end"][:10], "%Y-%m-%d").date()
-                l_items.append({"d": s_f, "t": f["name"].split(" ")[0].capitalize(), "u": "Ferien", "type": "fer", "info": f"{s_f.strftime('%d.%m.')}-{e_f.strftime('%d.%m.')}"})
+                s_f = datetime.strptime(f["startDate"], "%Y-%m-%d").date()
+                e_f = datetime.strptime(f["endDate"], "%Y-%m-%d").date()
+                n_f = f.get("name", [{"text": "Ferien"}])[0]["text"]
+                l_items.append({"d": s_f, "t": n_f.split(" ")[0].capitalize(), "u": "Ferien", "type": "fer", "info": f"{s_f.strftime('%d.%m.')}-{e_f.strftime('%d.%m.')}"})
             except: continue
     for item in sorted(l_items, key=lambda x: x["d"]):
         if item["type"] == "ev": c = df_users[df_users["name"]==item["u"]]["color"].values[0] if item["u"] in df_users["name"].values else "#3498db"
@@ -228,7 +235,7 @@ else: # LISTE
 # --- 8. NUTZER VERWALTUNG ---
 st.sidebar.markdown("---")
 with st.sidebar.expander("👤 Nutzer verwalten"):
-    t1, t2, t3 = st.tabs(["Neu", "Bearbeiten", "Löschen"])
+    t1, t2, t3 = st.tabs(["Neu", "Farbe", "Löschen"])
     with t1:
         nu = st.text_input("Name", key="nu_new").strip()
         nc = st.color_picker("Farbe", "#3498db", key="nc_new")
