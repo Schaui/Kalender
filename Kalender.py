@@ -7,9 +7,15 @@ import calendar
 import requests
 
 # --- KONFIGURATION & STYLING ---
-st.set_page_config(page_title="Team Kalender Pro", layout="wide")
+st.set_page_config(page_title="Team Kalender", layout="wide")
+
+# CSS: Entfernt den Abstand am oberen Rand und stylt die Karten
 st.markdown("""
     <style>
+    .block-container {
+        padding-top: 1rem !important;
+        padding-bottom: 0rem !important;
+    }
     [data-testid="column"] { min-width: 150px; }
     .dot-container { display: flex; justify-content: center; gap: 1px; margin-top: 1px; flex-wrap: wrap; }
     .dot { height: 4px; width: 4px; border-radius: 50%; }
@@ -17,16 +23,21 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
+# --- LOGO GANZ OBEN (ZENTRIERT) ---
+col_l1, col_l2, col_l3 = st.columns([1, 1, 1])
+with col_l2:
+    # Setze hier deinen Direktlink (z.B. von Postimages) ein:
+    st.image("https://via.placeholder.com/400x150.png?text=DEIN+LOGO", use_container_width=True)
+
+# --- VERBINDUNG & DATEN ---
 URL = "https://docs.google.com/spreadsheets/d/1pk6k10OKOEeR7JPfOm6AjRiccLTx6Fnh01MitDGEXsE/edit#gid=0"
 conn = st.connection("gsheets", type=GSheetsConnection)
 MONATS_NAMEN = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"]
 WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 LAND_CODE = "SH" 
 
-# Wochenstart für die Kalender-Logik auf Montag (0) setzen
 calendar.setfirstweekday(calendar.MONDAY)
 
-# --- DATEN-LOGIK ---
 def load_data():
     try:
         u = conn.read(spreadsheet=URL, worksheet="users", ttl=0)
@@ -62,7 +73,7 @@ def get_grouped_event_list(df):
                 if i < len(dates): start = dates[i]
     return display_list, data_refs
 
-# --- SIDEBAR ---
+# --- SIDEBAR (FILTER & EINSTELLUNGEN) ---
 st.sidebar.title("⚙️ Einstellungen")
 view_mode = st.sidebar.radio("Ansicht:", ["Monat", "Jahr", "Liste"])
 selected_year = st.sidebar.number_input("Jahr:", min_value=2024, max_value=2030, value=date.today().year)
@@ -76,7 +87,7 @@ st.sidebar.markdown("---")
 visible_users = [row['name'] for _, row in df_users.iterrows() if st.sidebar.checkbox(row['name'], value=True, key=f"f_{row['name']}")] if not df_users.empty else []
 df_ev_filt = df_events[df_events["user"].isin(visible_users)] if not df_events.empty else df_events
 
-# --- KALENDER & FERIEN RENDERING ---
+# --- LOGIK FÜR FEIERTAGS- & FERIEN-ANZEIGE ---
 de_hols = holidays.Germany(subdiv=LAND_CODE, years=selected_year)
 ferien_daten = get_ferien(LAND_CODE, selected_year)
 
@@ -94,7 +105,6 @@ def render_day(d_obj, compact=False):
     h_name = de_hols.get(d_obj) if show_hols else None
     in_f, f_n = is_ferien(d_obj)
     display_f = in_f if show_ferien else False
-    
     u_evs = df_ev_filt[df_ev_filt["date"] == str(d_obj)] if not df_ev_filt.empty else pd.DataFrame()
     bg = "#3d3d3d" if d_obj == date.today() else "transparent"
     f_c = "rgba(241, 196, 15, 0.15)" if display_f else "transparent"
@@ -114,14 +124,7 @@ def render_day(d_obj, compact=False):
         html += f"<div style='background:{c}; color:white; padding:3px; margin-top:3px; font-size:12px; font-weight:bold; border-radius:3px; line-height:1.2; text-align:center;'>{r['title']}</div>"
     return html + "</div>"
 
-# --- MANAGEMENT BEREICH ---
-
-# LOGO ZENTRIERUNG
-col_l1, col_l2, col_l3 = st.columns([1, 1, 1])
-with col_l2:
-    # Ersetze die URL durch dein Logo (z.B. "logo.png")
-    st.image("https://github.com/Schaui/Kalender/blob/main/Gemini_Generated_Image_cn6fltcn6fltcn6f.png?raw=true", use_container_width=True)
-
+# --- HAUPTBEREICH: TITEL & CRUD ---
 st.title(f"📅 Team-Kalender {selected_year}")
 c1, c2, c3 = st.columns(3)
 display_options, ref_data = get_grouped_event_list(df_events)
@@ -185,21 +188,22 @@ elif view_mode == "Jahr":
                     for i, day in enumerate(week):
                         if day != 0: d_cols[i].markdown(render_day(date(selected_year, m, day), True), unsafe_allow_html=True)
 
-else: # LISTE
+else: # LISTE (MIT FILTERN & SAUBEREN NAMEN)
     st.subheader("📋 Übersicht")
     l_items = []
     
-    # 1. Nutzer-Events
+    # 1. Nutzer-Events (gefiltert nach Sidebar)
     _, refs = get_grouped_event_list(df_ev_filt)
     for r in refs: 
         l_items.append({"d": r["start"], "t": r["title"], "u": r["user"], "type": "ev", "info": f"{r['start'].strftime('%d.%m.')} - {r['end'].strftime('%d.%m.')}" if r['start']!=r['end'] else ""})
     
-    # 2. Feiertage
+    # 2. Feiertage (nur wenn show_hols aktiv)
     if show_hols:
         for d, n in de_hols.items():
-            if d.year == selected_year: l_items.append({"d": d, "t": n, "u": "Feiertag", "type": "hol", "info": ""})
-            
-    # 3. Ferien (Bereinigter Name!)
+            if d.year == selected_year: 
+                l_items.append({"d": d, "t": n, "u": "Feiertag", "type": "hol", "info": ""})
+    
+    # 3. Ferien (nur wenn show_ferien aktiv + Namens-Cleanup)
     if show_ferien:
         for f in ferien_daten:
             try:
@@ -209,23 +213,16 @@ else: # LISTE
                 l_items.append({"d": s_f, "t": clean_name, "u": "Ferien", "type": "fer", "info": f"{s_f.strftime('%d.%m.')} - {e_f.strftime('%d.%m.')}"})
             except: continue
 
-    # Sortieren und Anzeigen
+    # Sortierte Anzeige
     for item in sorted(l_items, key=lambda x: x["d"]):
         if item["type"] == "ev":
             c = df_users[df_users["name"]==item["u"]]["color"].values[0] if item["u"] in df_users["name"].values else "#3498db"
         elif item["type"] == "hol": c = "#e74c3c"
         else: c = "#f1c40f"
-        
         st.markdown(f'''
             <div class="event-card" style="border-left:5px solid {c}; background:#262730; padding:10px;">
-                <div>
-                    <small>{item["d"].strftime("%d.%m.%Y")}</small><br>
-                    <b>{item["t"]}</b><br>
-                    <small style="color:#aaa">{item["info"]}</small>
-                </div>
-                <div style="background:{c}; color:white; padding:3px 10px; border-radius:12px; font-size:10px; font-weight:bold;">
-                    {item["u"]}
-                </div>
+                <div><small>{item["d"].strftime("%d.%m.%Y")}</small><br><b>{item["t"]}</b><br><small style="color:#aaa">{item["info"]}</small></div>
+                <div style="background:{c}; color:white; padding:3px 10px; border-radius:12px; font-size:10px; font-weight:bold;">{item["u"]}</div>
             </div>
         ''', unsafe_allow_html=True)
 
@@ -245,7 +242,7 @@ with st.sidebar.expander("👤 Nutzer verwalten"):
         if not df_users.empty:
             u_e = st.selectbox("Nutzer", df_users["name"].tolist(), key="u_edit")
             idx = df_users[df_users["name"] == u_e].index[0]
-            new_c = st.color_picker("Farbe ändern", df_users.at[idx, "color"], key="u_edit_c")
+            new_c = st.color_picker("Bearbeiten", df_users.at[idx, "color"], key="u_edit_c")
             if st.button("Aktualisieren"):
                 df_users.at[idx, "color"] = new_c
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
