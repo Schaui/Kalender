@@ -23,6 +23,9 @@ MONATS_NAMEN = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "A
 WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 LAND_CODE = "SH" 
 
+# Wochenstart für Logik auf Montag setzen
+calendar.setfirstweekday(calendar.MONDAY)
+
 # --- DATEN-LOGIK ---
 def load_data():
     try:
@@ -78,20 +81,23 @@ de_hols = holidays.Germany(subdiv=LAND_CODE, years=selected_year)
 ferien_daten = get_ferien(LAND_CODE, selected_year)
 
 def is_ferien(d):
-    if not show_ferien: return False, ""
     for f in ferien_daten:
         try:
-            if datetime.strptime(f["start"][:10], "%Y-%m-%d").date() <= d <= datetime.strptime(f["end"][:10], "%Y-%m-%d").date():
-                return True, f["name"].split(" ")[0].capitalize()
+            s_f = datetime.strptime(f["start"][:10], "%Y-%m-%d").date()
+            e_f = datetime.strptime(f["end"][:10], "%Y-%m-%d").date()
+            if s_f <= d <= e_f: return True, f["name"].split(" ")[0].capitalize()
         except: continue
     return False, ""
 
 def render_day(d_obj, compact=False):
     h_name = de_hols.get(d_obj) if show_hols else None
     in_f, f_n = is_ferien(d_obj)
+    # Ferien nur anzeigen, wenn Filter aktiv
+    display_f = in_f if show_ferien else False
+    
     u_evs = df_ev_filt[df_ev_filt["date"] == str(d_obj)] if not df_ev_filt.empty else pd.DataFrame()
     bg = "#3d3d3d" if d_obj == date.today() else "transparent"
-    f_c = "rgba(241, 196, 15, 0.15)" if in_f else "transparent"
+    f_c = "rgba(241, 196, 15, 0.15)" if display_f else "transparent"
     
     if compact:
         dots = ("<div class='dot' style='background:#e74c3c;'></div>" if h_name else "")
@@ -100,7 +106,7 @@ def render_day(d_obj, compact=False):
     
     html = f"<div style='border:1px solid #555; background:{bg}; background-image:linear-gradient({f_c},{f_c}); padding:5px; min-height:85px; border-radius:5px;'>"
     html += f"<div style='display:flex; justify-content:space-between;'><b>{d_obj.day}</b>"
-    if in_f: html += f"<span style='color:#f1c40f; font-size:10px;'>{f_n}</span>"
+    if display_f: html += f"<span style='color:#f1c40f; font-size:10px;'>{f_n}</span>"
     html += "</div>"
     if h_name: html += f"<div style='background:#e74c3c; color:white; padding:2px; font-size:10px; border-radius:3px; margin-top:2px; line-height:1.1;'>{h_name}</div>"
     for _, r in u_evs.iterrows():
@@ -117,7 +123,8 @@ with c1.expander("➕ Neuer Eintrag"):
     with st.form("add", clear_on_submit=True):
         t = st.text_input("Titel")
         colA, colB = st.columns(2)
-        d_s, d_e = colA.date_input("Von", date.today()), colB.date_input("Bis", date.today())
+        d_s = colA.date_input("Von", date.today(), format="DD.MM.YYYY")
+        d_e = colB.date_input("Bis", date.today(), format="DD.MM.YYYY")
         u = st.selectbox("Wer?", df_users["name"].tolist() if not df_users.empty else [])
         if st.form_submit_button("Eintragen"):
             if t and u:
@@ -129,7 +136,7 @@ with c1.expander("➕ Neuer Eintrag"):
 
 with c2.expander("✏️ Bearbeiten"):
     if display_options:
-        sel = st.selectbox("Block wählen", range(len(display_options)), format_func=lambda x: display_options[x], key="e_sel_block")
+        sel = st.selectbox("Block wählen", range(len(display_options)), format_func=lambda x: display_options[x], key="e_block")
         ref = ref_data[sel]
         with st.form("edit_form"):
             nt = st.text_input("Titel ändern", ref["title"])
@@ -142,7 +149,7 @@ with c2.expander("✏️ Bearbeiten"):
 
 with c3.expander("🗑️ Löschen"):
     if display_options:
-        idx_d = st.selectbox("Block wählen", range(len(display_options)), format_func=lambda x: display_options[x], key="d_sel_block")
+        idx_d = st.selectbox("Block wählen", range(len(display_options)), format_func=lambda x: display_options[x], key="d_block")
         if st.button("Gesamten Block löschen", type="primary"):
             rd = ref_data[idx_d]
             mask = (df_events["title"] == rd["title"]) & (df_events["user"] == rd["user"]) & (pd.to_datetime(df_events["date"]).dt.date >= rd["start"]) & (pd.to_datetime(df_events["date"]).dt.date <= rd["end"])
@@ -150,7 +157,7 @@ with c3.expander("🗑️ Löschen"):
             conn.update(spreadsheet=URL, worksheet="events", data=df_events)
             st.cache_data.clear(); st.rerun()
 
-# --- ANSICHTEN ---
+# --- ANSICHTEN RENDERN ---
 if view_mode == "Monat":
     cols = st.columns(7)
     for i, d in enumerate(WOCHENTAGE): cols[i].write(f"**{d}**")
@@ -158,6 +165,7 @@ if view_mode == "Monat":
         cols = st.columns(7)
         for i, day in enumerate(week):
             if day != 0: cols[i].markdown(render_day(date(selected_year, selected_month, day)), unsafe_allow_html=True)
+
 elif view_mode == "Jahr":
     for r in range(4):
         cols = st.columns(3)
@@ -169,43 +177,75 @@ elif view_mode == "Jahr":
                     d_cols = st.columns(7)
                     for i, day in enumerate(week):
                         if day != 0: d_cols[i].markdown(render_day(date(selected_year, m, day), True), unsafe_allow_html=True)
+
 else: # Liste
     st.subheader("📋 Übersicht")
     l_items = []
+    
+    # 1. Nutzer-Events
     _, refs = get_grouped_event_list(df_ev_filt)
-    for r in refs: l_items.append({"d": r["start"], "t": r["title"], "u": r["user"], "type": "ev", "info": f"{r['start'].strftime('%d.%m.')} - {r['end'].strftime('%d.%m.')}" if r['start']!=r['end'] else ""})
+    for r in refs: 
+        l_items.append({"d": r["start"], "t": r["title"], "u": r["user"], "type": "ev", "info": f"{r['start'].strftime('%d.%m.')} - {r['end'].strftime('%d.%m.')}" if r['start']!=r['end'] else ""})
+    
+    # 2. Feiertage (Filter berücksichtigen)
     if show_hols:
         for d, n in de_hols.items():
             if d.year == selected_year: l_items.append({"d": d, "t": n, "u": "Feiertag", "type": "hol", "info": ""})
+            
+    # 3. Ferien (Filter berücksichtigen)
+    if show_ferien:
+        for f in ferien_daten:
+            try:
+                s_f = datetime.strptime(f["start"][:10], "%Y-%m-%d").date()
+                e_f = datetime.strptime(f["end"][:10], "%Y-%m-%d").date()
+                l_items.append({"d": s_f, "t": f["name"], "u": "Ferien", "type": "fer", "info": f"{s_f.strftime('%d.%m.')} - {e_f.strftime('%d.%m.')}"})
+            except: continue
+
+    # Sortieren und Anzeigen
     for item in sorted(l_items, key=lambda x: x["d"]):
-        c = df_users[df_users["name"]==item["u"]]["color"].values[0] if item["type"]=="ev" and item["u"] in df_users["name"].values else ("#e74c3c" if item["type"]=="hol" else "#f1c40f")
-        st.markdown(f'<div class="event-card" style="border-left:5px solid {c}; background:#262730; padding:10px;"><div><small>{item["d"].strftime("%d.%m.%Y")}</small><br><b>{item["t"]}</b><br><small style="color:#f1c40f">{item["info"]}</small></div><div style="background:{c}; color:white; padding:3px 10px; border-radius:12px; font-size:10px; font-weight:bold;">{item["u"]}</div></div>', unsafe_allow_html=True)
+        if item["type"] == "ev":
+            c = df_users[df_users["name"]==item["u"]]["color"].values[0] if item["u"] in df_users["name"].values else "#3498db"
+        elif item["type"] == "hol": c = "#e74c3c"
+        else: c = "#f1c40f"
+        
+        st.markdown(f'''
+            <div class="event-card" style="border-left:5px solid {c}; background:#262730; padding:10px;">
+                <div>
+                    <small>{item["d"].strftime("%d.%m.%Y")}</small><br>
+                    <b>{item["t"]}</b><br>
+                    <small style="color:#aaa">{item["info"]}</small>
+                </div>
+                <div style="background:{c}; color:white; padding:3px 10px; border-radius:12px; font-size:10px; font-weight:bold;">
+                    {item["u"]}
+                </div>
+            </div>
+        ''', unsafe_allow_html=True)
 
 # --- NUTZER VERWALTUNG (SIDEBAR) ---
 st.sidebar.markdown("---")
 with st.sidebar.expander("👤 Nutzer verwalten"):
     tab1, tab2, tab3 = st.tabs(["Neu", "Farbe", "Löschen"])
     with tab1:
-        nu = st.text_input("Name", key="new_u_name")
-        nc = st.color_picker("Farbe", "#3498db", key="new_u_col")
-        if st.button("Hinzufügen", key="btn_add"):
+        nu = st.text_input("Name", key="u_n")
+        nc = st.color_picker("Farbe", "#3498db", key="u_c")
+        if st.button("Hinzufügen"):
             if nu:
                 df_users = pd.concat([df_users, pd.DataFrame([{"name": nu, "color": nc}])], ignore_index=True)
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
                 st.cache_data.clear(); st.rerun()
     with tab2:
         if not df_users.empty:
-            u_e = st.selectbox("Nutzer", df_users["name"].tolist(), key="u_edit_sel")
+            u_e = st.selectbox("Nutzer", df_users["name"].tolist(), key="u_edit")
             idx = df_users[df_users["name"] == u_e].index[0]
-            new_c = st.color_picker("Farbe ändern", df_users.at[idx, "color"], key="u_edit_col")
-            if st.button("Aktualisieren", key="btn_update"):
+            new_c = st.color_picker("Farbe ändern", df_users.at[idx, "color"], key="u_edit_c")
+            if st.button("Aktualisieren"):
                 df_users.at[idx, "color"] = new_c
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
                 st.cache_data.clear(); st.rerun()
     with tab3:
         if not df_users.empty:
-            u_d = st.selectbox("Nutzer entfernen", df_users["name"].tolist(), key="u_del_sel")
-            if st.button("Löschen", key="btn_delete"):
+            u_d = st.selectbox("Nutzer entfernen", df_users["name"].tolist(), key="u_del")
+            if st.button("Löschen"):
                 df_users = df_users[df_users["name"] != u_d]
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
                 st.cache_data.clear(); st.rerun()
