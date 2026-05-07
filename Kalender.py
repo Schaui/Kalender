@@ -120,7 +120,7 @@ def render_day(d_obj, compact=False):
 col_l1, col_l2, col_l3 = st.columns([1, 1, 1])
 with col_l2:
     # Ersetze die URL durch dein Logo (z.B. "logo.png")
-    st.image("https://imgur.com/a/j2fDDAG", use_container_width=True)
+    st.image("https://github.com/Schaui/Kalender/blob/main/Gemini_Generated_Image_cn6fltcn6fltcn6f.png?raw=true", use_container_width=True)
 
 st.title(f"📅 Team-Kalender {selected_year}")
 c1, c2, c3 = st.columns(3)
