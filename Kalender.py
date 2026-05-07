@@ -89,26 +89,43 @@ def is_ferien(d):
 def render_day(d_obj, compact=False):
     h_name = de_hols.get(d_obj) if show_hols else None
     in_f, f_n = is_ferien(d_obj)
-    display_f = in_f if show_ferien else False # Reagiert auf Sidebar Checkbox
+    display_f = in_f if show_ferien else False
     
     u_evs = df_ev_filt[df_ev_filt["date"] == str(d_obj)] if not df_ev_filt.empty else pd.DataFrame()
-    bg = "#3d3d3d" if d_obj == date.today() else "transparent"
-    # Gelber Hintergrund für Ferien
-    f_c = "rgba(241, 196, 15, 0.2)" if display_f else "transparent"
     
+    # Farben definieren
+    is_today = d_obj == date.today()
+    today_color = "rgba(255, 255, 255, 0.15)" # Dezentes Weiß/Grau für heute
+    ferien_color = "rgba(241, 196, 15, 0.25)" # Gelb für Ferien
+    
+    # Hintergrund-Logik: Priorität auf Ferien, dann heute
+    bg_style = "transparent"
+    if display_f:
+        bg_style = ferien_color
+    elif is_today:
+        bg_style = today_color
+
     if compact:
         dots = ("<div class='dot' style='background:#e74c3c;'></div>" if h_name else "")
         dots += "".join([f"<div class='dot' style='background:{df_users[df_users['name']==u]['color'].values[0] if u in df_users['name'].values else '#3498db'};'></div>" for u in u_evs["user"].unique()])
-        return f"<div style='text-align:center; background:{f_c}; border-radius:3px;'>{d_obj.day}<div class='dot-container'>{dots}</div></div>"
+        return f"<div style='text-align:center; background:{bg_style}; border-radius:3px; padding:2px;'>{d_obj.day}<div class='dot-container'>{dots}</div></div>"
     
-    html = f"<div style='border:1px solid #555; background:{bg}; background-image:linear-gradient({f_c},{f_c}); padding:5px; min-height:85px; border-radius:5px;'>"
-    html += f"<div style='display:flex; justify-content:space-between;'><b>{d_obj.day}</b>"
-    if display_f: html += f"<span style='color:#f1c40f; font-size:10px; font-weight:bold;'>{f_n}</span>"
+    # Große Ansicht (Monat)
+    border = "2px solid #f1c40f" if display_f else "1px solid #555"
+    html = f"<div style='border:{border}; background:{bg_style}; padding:5px; min-height:85px; border-radius:5px; position:relative;'>"
+    html += f"<div style='display:flex; justify-content:space-between; align-items:center;'><b style='font-size:14px;'>{d_obj.day}</b>"
+    
+    if display_f: 
+        html += f"<span style='background:#f1c40f; color:black; font-size:9px; font-weight:bold; padding:1px 4px; border-radius:3px;'>{f_n}</span>"
     html += "</div>"
-    if h_name: html += f"<div style='background:#e74c3c; color:white; padding:2px; font-size:10px; border-radius:3px; margin-top:2px; line-height:1.1;'>{h_name}</div>"
+    
+    if h_name: 
+        html += f"<div style='background:#e74c3c; color:white; padding:2px; font-size:10px; border-radius:3px; margin-top:2px; line-height:1.1;'>{h_name}</div>"
+    
     for _, r in u_evs.iterrows():
         c = df_users[df_users["name"]==r['user']]["color"].values[0] if r['user'] in df_users["name"].values else "#555"
-        html += f"<div style='background:{c}; color:white; padding:3px; margin-top:3px; font-size:12px; font-weight:bold; border-radius:3px; line-height:1.2; text-align:center;'>{r['title']}</div>"
+        html += f"<div style='background:{c}; color:white; padding:3px; margin-top:3px; font-size:11px; font-weight:bold; border-radius:3px; line-height:1.1; text-align:center; box-shadow: 1px 1px 2px rgba(0,0,0,0.2);'>{r['title']}</div>"
+    
     return html + "</div>"
 
 # --- 6. CRUD & LISTEN-LOGIK ---
