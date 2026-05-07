@@ -255,7 +255,7 @@ with st.sidebar.expander("👤 Benutzer-Verwaltung"):
             edit_u = st.selectbox("Nutzer wählen", df_users["name"], key="edit_u_sel")
             u_idx = df_users[df_users["name"] == edit_u].index[0]
             new_c_val = st.color_picker("Neue Farbe", df_users.at[u_idx, "color"], key="edit_c_val")
-            if st.button("Farbe ändern"):
+            if st.button("Speichern"):
                 df_users.at[u_idx, "color"] = new_c_val
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
                 st.rerun()
