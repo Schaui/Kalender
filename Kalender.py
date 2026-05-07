@@ -97,59 +97,6 @@ df_ev_filt = df_events[df_events["user"].isin(visible_users)] if not df_events.e
 
 df_ev_filt = df_events[df_events["user"].isin(visible_users)] if not df_events.empty else df_events
 
-# --- DATEN-VERWALTUNG & ROLLIERENDES ARCHIV ---
-st.sidebar.markdown("---")
-with st.sidebar.expander("📦 Daten-Verwaltung"):
-    if st.button("🔄 Cache leeren"):
-        st.cache_data.clear()
-        st.rerun()
-    
-    st.markdown("**Rollierendes Archiv**")
-    
-    # Heute minus 365 Tage = Unsere Grenze
-    cutoff_date = date.today() - timedelta(days=365)
-    
-    if not df_events.empty:
-        # Hilfsspalte für den Vergleich erstellen
-        df_temp = df_events.copy()
-        # Sicherstellen, dass das Datum als date-Objekt vorliegt
-        df_temp["date_dt"] = pd.to_datetime(df_temp["date"]).dt.date
-        
-        # Filter: Alles was älter als 365 Tage ist
-        old_events = df_temp[df_temp["date_dt"] < cutoff_date]
-        
-        if len(old_events) > 0:
-            st.warning(f"{len(old_events)} Termine sind älter als 1 Jahr (vor dem {cutoff_date.strftime('%d.%m.%Y')}).")
-            
-            if st.button("Alte Termine jetzt archivieren"):
-                try:
-                    # 1. Bestehendes Archiv laden
-                    df_archiv = conn.read(spreadsheet=URL, worksheet="archiv", ttl=0)
-                    
-                    # 2. Alte Termine vorbereiten (Hilfsspalte entfernen)
-                    to_archive = old_events.drop(columns=["date_dt"])
-                    
-                    # 3. Archiv zusammenführen (falls archiv leer ist, nur to_archive nehmen)
-                    if not df_archiv.empty:
-                        df_archiv_new = pd.concat([df_archiv, to_archive], ignore_index=True)
-                    else:
-                        df_archiv_new = to_archive
-                    
-                    # 4. Aktive Events behalten (alles ab dem Cutoff-Datum)
-                    df_events_new = df_temp[df_temp["date_dt"] >= cutoff_date].drop(columns=["date_dt"])
-                    
-                    # 5. Google Sheets aktualisieren
-                    conn.update(spreadsheet=URL, worksheet="archiv", data=df_archiv_new)
-                    conn.update(spreadsheet=URL, worksheet="events", data=df_events_new)
-                    
-                    st.success(f"Archiviert! Der Kalender ist nun bereinigt.")
-                    st.cache_data.clear()
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Fehler beim Archivieren: {e}")
-        else:
-            st.info(f"Alles aktuell. Nächste Archivierung nötig für Termine vor dem {cutoff_date.strftime('%d.%m.%Y')}.")
-
 # --- 5. LOGIK ---
 de_hols = holidays.Germany(subdiv=LAND_CODE, years=selected_year)
 
@@ -324,3 +271,56 @@ with st.sidebar.expander("👤 Nutzer verwalten"):
                 df_users = df_users[df_users["name"] != u_d]
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
                 st.cache_data.clear(); st.rerun()
+
+# --- 9. DATEN-VERWALTUNG & ROLLIERENDES ARCHIV ---
+st.sidebar.markdown("---")
+with st.sidebar.expander("📦 Daten-Verwaltung"):
+    if st.button("🔄 Cache leeren"):
+        st.cache_data.clear()
+        st.rerun()
+    
+    st.markdown("**Rollierendes Archiv**")
+    
+    # Heute minus 365 Tage = Unsere Grenze
+    cutoff_date = date.today() - timedelta(days=365)
+    
+    if not df_events.empty:
+        # Hilfsspalte für den Vergleich erstellen
+        df_temp = df_events.copy()
+        # Sicherstellen, dass das Datum als date-Objekt vorliegt
+        df_temp["date_dt"] = pd.to_datetime(df_temp["date"]).dt.date
+        
+        # Filter: Alles was älter als 365 Tage ist
+        old_events = df_temp[df_temp["date_dt"] < cutoff_date]
+        
+        if len(old_events) > 0:
+            st.warning(f"{len(old_events)} Termine sind älter als 1 Jahr (vor dem {cutoff_date.strftime('%d.%m.%Y')}).")
+            
+            if st.button("Alte Termine jetzt archivieren"):
+                try:
+                    # 1. Bestehendes Archiv laden
+                    df_archiv = conn.read(spreadsheet=URL, worksheet="archiv", ttl=0)
+                    
+                    # 2. Alte Termine vorbereiten (Hilfsspalte entfernen)
+                    to_archive = old_events.drop(columns=["date_dt"])
+                    
+                    # 3. Archiv zusammenführen (falls archiv leer ist, nur to_archive nehmen)
+                    if not df_archiv.empty:
+                        df_archiv_new = pd.concat([df_archiv, to_archive], ignore_index=True)
+                    else:
+                        df_archiv_new = to_archive
+                    
+                    # 4. Aktive Events behalten (alles ab dem Cutoff-Datum)
+                    df_events_new = df_temp[df_temp["date_dt"] >= cutoff_date].drop(columns=["date_dt"])
+                    
+                    # 5. Google Sheets aktualisieren
+                    conn.update(spreadsheet=URL, worksheet="archiv", data=df_archiv_new)
+                    conn.update(spreadsheet=URL, worksheet="events", data=df_events_new)
+                    
+                    st.success(f"Archiviert! Der Kalender ist nun bereinigt.")
+                    st.cache_data.clear()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Fehler beim Archivieren: {e}")
+        else:
+            st.info(f"Alles aktuell. Nächste Archivierung nötig für Termine vor dem {cutoff_date.strftime('%d.%m.%Y')}.")
