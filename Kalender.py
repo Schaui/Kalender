@@ -27,7 +27,7 @@ st.markdown("""
 col_l1, col_l2, col_l3 = st.columns([1, 1, 1])
 with col_l2:
     # Setze hier deinen Direktlink (z.B. von Postimages) ein:
-    st.image("https://via.placeholder.com/400x150.png?text=DEIN+LOGO", use_container_width=True)
+    st.image("https://github.com/Schaui/Kalender/blob/main/Gemini_Generated_Image_cn6fltcn6fltcn6f.png?raw=true", use_container_width=True)
 
 # --- VERBINDUNG & DATEN ---
 URL = "https://docs.google.com/spreadsheets/d/1pk6k10OKOEeR7JPfOm6AjRiccLTx6Fnh01MitDGEXsE/edit#gid=0"
