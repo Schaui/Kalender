@@ -223,10 +223,33 @@ else: # Liste (Komprimiert)
         st.markdown(f'<div class="event-card" style="border-left:5px solid {u_c}; background:{bg}; padding:10px;"><div><small>{item["d"].strftime("%d.%m.%Y")}</small><br><b>{item["t"]}</b><br><small style="color:#f1c40f">{item["info"]}</small></div><div style="background:{u_c}; color:white; padding:3px 10px; border-radius:12px; font-size:10px;">{item["u"]}</div></div>', unsafe_allow_html=True)
 
 # --- BENUTZER VERWALTUNG (SIDEBAR) ---
+st.sidebar.markdown("---")
 with st.sidebar.expander("👤 Benutzer-Verwaltung"):
-    nu = st.text_input("Name")
-    nc = st.color_picker("Farbe", "#3498db")
-    if st.button("Hinzufügen") and nu:
-        df_users = pd.concat([df_users, pd.DataFrame([{"name": nu, "color": nc}])], ignore_index=True)
-        conn.update(spreadsheet=URL, worksheet="users", data=df_users)
-        st.rerun()
+    tab1, tab2, tab3 = st.tabs(["Neu", "Farbe", "Löschen"])
+    
+    with tab1:
+        nu = st.text_input("Name", key="new_u_name")
+        nc = st.color_picker("Farbe", "#3498db", key="new_u_color")
+        if st.button("Hinzufügen"):
+            if nu:
+                df_users = pd.concat([df_users, pd.DataFrame([{"name": nu, "color": nc}])], ignore_index=True)
+                conn.update(spreadsheet=URL, worksheet="users", data=df_users)
+                st.rerun()
+
+    with tab2:
+        if not df_users.empty:
+            edit_u = st.selectbox("Nutzer wählen", df_users["name"].tolist(), key="edit_u_sel")
+            u_idx = df_users[df_users["name"] == edit_u].index[0]
+            new_c_val = st.color_picker("Neue Farbe", df_users.at[u_idx, "color"], key="edit_u_color")
+            if st.button("Farbe speichern"):
+                df_users.at[u_idx, "color"] = new_c_val
+                conn.update(spreadsheet=URL, worksheet="users", data=df_users)
+                st.rerun()
+
+    with tab3:
+        if not df_users.empty:
+            del_u = st.selectbox("Nutzer entfernen", df_users["name"].tolist(), key="del_u_sel")
+            if st.button("Endgültig entfernen"):
+                df_users = df_users[df_users["name"] != del_u]
+                conn.update(spreadsheet=URL, worksheet="users", data=df_users)
+                st.rerun()
