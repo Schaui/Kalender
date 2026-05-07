@@ -83,12 +83,15 @@ ferien_daten = get_ferien(LAND_CODE, selected_year)
 de_hols = holidays.Germany(subdiv=LAND_CODE, years=selected_year)
 
 def get_ferien_info(d):
-    if not show_ferien: return False, ""
+    if not show_ferien or not ferien_daten: return False, ""
     for f in ferien_daten:
-        s = datetime.strptime(f["start"][:10], "%Y-%m-%d").date()
-        e = datetime.strptime(f["end"][:10], "%Y-%m-%d").date()
-        if s <= d <= e:
-            return True, f["name"].split(" ")[0].capitalize()
+        try:
+            # Stabilerer Datumscheck
+            s = datetime.strptime(f["start"][:10], "%Y-%m-%d").date()
+            e = datetime.strptime(f["end"][:10], "%Y-%m-%d").date()
+            if s <= d <= e:
+                return True, f["name"].split(" ")[0].capitalize()
+        except: continue
     return False, ""
 
 def render_day(d_obj, compact=False):
@@ -97,24 +100,25 @@ def render_day(d_obj, compact=False):
     u_evs = df_ev_filt[df_ev_filt["date"] == str(d_obj)] if not df_ev_filt.empty else pd.DataFrame()
     
     # Farben & Highlight
-    bg = "#3d3d3d" if d_obj == date.today() else "transparent"
-    ferien_bg = "rgba(241, 196, 15, 0.2)" if is_f else "transparent"
+    is_today = d_obj == date.today()
+    bg = "rgba(255, 255, 255, 0.1)" if is_today else "transparent"
+    ferien_bg = "rgba(241, 196, 15, 0.25)" if is_f else "transparent"
     border_color = "#f1c40f" if is_f else "#555"
     
     if compact: # JAHR-ANSICHT
-        style = f"background:{ferien_bg}; border-radius:2px;" if is_f else ""
+        style = f"background:{ferien_bg}; border-radius:2px; padding: 2px;" if is_f else "padding: 2px;"
         dots = ("<div class='dot' style='background:#e74c3c;'></div>" if h_name else "")
         dots += "".join([f"<div class='dot' style='background:{df_users[df_users['name']==u]['color'].values[0] if u in df_users['name'].values else '#3498db'};'></div>" for u in u_evs["user"].unique()])
         return f"<div style='text-align:center; {style}'>{d_obj.day}<div class='dot-container'>{dots}</div></div>"
     
-    # MONAT-ANSICHT (Hier lag der Fehler mit dem extra </div>)
-    html = f"<div style='border:1px solid {border_color}; border-top: 4px solid {border_color}; background:{bg}; background-color:{ferien_bg}; padding:5px; min-height:85px; border-radius:5px;'>"
+    # MONAT-ANSICHT
+    html = f"<div style='border:1px solid {border_color}; border-top: 4px solid {border_color}; background-color:{bg}; background-image: linear-gradient({ferien_bg}, {ferien_bg}); padding:5px; min-height:85px; border-radius:5px;'>"
     html += f"<div style='display:flex; justify-content:space-between; align-items:center;'><b style='font-size:14px;'>{d_obj.day}</b>"
     
     if is_f:
-        html += f"<span style='color:#f1c40f; font-size:9px; font-weight:bold;'>{f_name}</span>"
+        html += f"<span style='background:#f1c40f; color:black; font-size:9px; font-weight:bold; padding:1px 4px; border-radius:3px;'>{f_name}</span>"
     
-    html += "</div>" # Ende Header-Zeile (Zahl & Ferienname)
+    html += "</div>"
     
     if h_name:
         html += f"<div style='background:#e74c3c; color:white; padding:2px; font-size:10px; border-radius:3px; margin-top:2px;'>{h_name}</div>"
@@ -123,10 +127,10 @@ def render_day(d_obj, compact=False):
         c = df_users[df_users["name"]==r['user']]["color"].values[0] if r['user'] in df_users["name"].values else "#555"
         html += f"<div style='background:{c}; color:white; padding:2px; margin-top:3px; font-size:11px; font-weight:bold; border-radius:3px; text-align:center;'>{r['title']}</div>"
     
-    html += "</div>" # Das finale schließende Tag für den gesamten Tag-Container
+    html += "</div>"
     return html
 
-# --- 6. NAVIGATION & CRUD (BLEIBT GLEICH) ---
+# --- 6. NAVIGATION & CRUD ---
 st.title(f"📅 Team-Kalender {selected_year}")
 c1, c2, c3 = st.columns(3)
 
@@ -214,10 +218,11 @@ else: # LISTE
     if show_hols:
         for d, n in de_hols.items():
             if d.year == selected_year: l_items.append({"d": d, "t": n, "u": "Feiertag", "type": "hol", "info": ""})
-    if show_ferien:
+    if show_ferien and ferien_daten:
         for f in ferien_daten:
             try:
-                s_f, e_f = datetime.strptime(f["start"][:10], "%Y-%m-%d").date(), datetime.strptime(f["end"][:10], "%Y-%m-%d").date()
+                s_f = datetime.strptime(f["start"][:10], "%Y-%m-%d").date()
+                e_f = datetime.strptime(f["end"][:10], "%Y-%m-%d").date()
                 l_items.append({"d": s_f, "t": f["name"].split(" ")[0].capitalize(), "u": "Ferien", "type": "fer", "info": f"{s_f.strftime('%d.%m.')}-{e_f.strftime('%d.%m.')}"})
             except: continue
     for item in sorted(l_items, key=lambda x: x["d"]):
@@ -232,37 +237,29 @@ with st.sidebar.expander("👤 Nutzer verwalten"):
     t1, t2, t3 = st.tabs(["Neu", "Bearbeiten", "Löschen"])
     
     with t1:
-        nu = st.text_input("Name", key="nu_input").strip() # .strip() entfernt versehentliche Leerzeichen
+        nu = st.text_input("Name", key="nu_input").strip()
         nc = st.color_picker("Farbe", "#3498db", key="nc_input")
-        
         if st.button("Hinzufügen"):
             if nu:
-                # PRÜFUNG: Existiert der Name schon (Groß-/Kleinschreibung ignorieren)?
                 existing_names = [name.lower() for name in df_users["name"].tolist()]
-                
                 if nu.lower() in existing_names:
                     st.error(f"Nutzer '{nu}' existiert bereits!")
                 else:
                     new_user = pd.DataFrame([{"name": nu, "color": nc}])
                     df_users = pd.concat([df_users, new_user], ignore_index=True)
                     conn.update(spreadsheet=URL, worksheet="users", data=df_users)
-                    st.cache_data.clear()
-                    st.success(f"{nu} wurde angelegt.")
-                    st.rerun()
-            else:
-                st.warning("Bitte einen Namen eingeben.")
+                    st.cache_data.clear(); st.success(f"{nu} wurde angelegt."); st.rerun()
+            else: st.warning("Bitte einen Namen eingeben.")
 
     with t2:
         if not df_users.empty:
             u_e = st.selectbox("Nutzer wählen", df_users["name"].tolist(), key="ue_select")
             idx = df_users[df_users["name"] == u_e].index[0]
             new_c = st.color_picker("Neue Farbe", df_users.at[idx, "color"], key="nec_picker")
-            
             if st.button("Aktualisieren"):
                 df_users.at[idx, "color"] = new_c
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
-                st.cache_data.clear()
-                st.rerun()
+                st.cache_data.clear(); st.rerun()
 
     with t3:
         if not df_users.empty:
@@ -270,6 +267,4 @@ with st.sidebar.expander("👤 Nutzer verwalten"):
             if st.button("Benutzer unwiderruflich löschen", type="primary"):
                 df_users = df_users[df_users["name"] != u_d]
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
-                # Optional: Hier könnte man auch alle Events dieses Nutzers löschen
-                st.cache_data.clear()
-                st.rerun()
+                st.cache_data.clear(); st.rerun()
