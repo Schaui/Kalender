@@ -7,7 +7,7 @@ import calendar
 import requests
 
 # --- 1. KONFIGURATION & STYLING ---
-st.set_page_config(page_title="Team Kalender", layout="wide")
+st.set_page_config(page_title="Team Kalender Pro", layout="wide")
 
 st.markdown("""
     <style>
@@ -55,7 +55,7 @@ df_users, df_events = load_data()
 
 # --- 4. SIDEBAR ---
 st.sidebar.title("⚙️ Einstellungen")
-if st.sidebar.button("🔄 Daten neu laden"):
+if st.sidebar.button("🔄 Daten & Cache neu laden"):
     st.cache_data.clear()
     st.rerun()
 
@@ -66,6 +66,12 @@ selected_month = (MONATS_NAMEN.index(st.sidebar.select_slider("Monat:", options=
 st.sidebar.subheader("Anzeige")
 show_hols = st.sidebar.checkbox("Feiertage 🔴", value=True)
 show_ferien = st.sidebar.checkbox("Ferien 🟡", value=True)
+
+# Ferien Diagnose in Sidebar
+ferien_daten = get_ferien(LAND_CODE, selected_year)
+if show_ferien:
+    if not ferien_daten: st.sidebar.error("❌ Ferien-API offline")
+    else: st.sidebar.success(f"✅ {len(ferien_daten)} Ferien geladen")
 
 st.sidebar.markdown("---")
 visible_users = []
@@ -78,15 +84,13 @@ if not df_users.empty:
 
 df_ev_filt = df_events[df_events["user"].isin(visible_users)] if not df_events.empty else df_events
 
-# --- 5. FERIEN LOGIK ---
-ferien_daten = get_ferien(LAND_CODE, selected_year)
+# --- 5. LOGIK ---
 de_hols = holidays.Germany(subdiv=LAND_CODE, years=selected_year)
 
 def get_ferien_info(d):
     if not show_ferien or not ferien_daten: return False, ""
     for f in ferien_daten:
         try:
-            # Stabilerer Datumscheck
             s = datetime.strptime(f["start"][:10], "%Y-%m-%d").date()
             e = datetime.strptime(f["end"][:10], "%Y-%m-%d").date()
             if s <= d <= e:
@@ -99,36 +103,27 @@ def render_day(d_obj, compact=False):
     h_name = de_hols.get(d_obj) if show_hols else None
     u_evs = df_ev_filt[df_ev_filt["date"] == str(d_obj)] if not df_ev_filt.empty else pd.DataFrame()
     
-    # Farben & Highlight
     is_today = d_obj == date.today()
     bg = "rgba(255, 255, 255, 0.1)" if is_today else "transparent"
     ferien_bg = "rgba(241, 196, 15, 0.25)" if is_f else "transparent"
     border_color = "#f1c40f" if is_f else "#555"
     
-    if compact: # JAHR-ANSICHT
-        style = f"background:{ferien_bg}; border-radius:2px; padding: 2px;" if is_f else "padding: 2px;"
+    if compact:
+        f_style = f"background:{ferien_bg}; border-radius:2px;" if is_f else ""
         dots = ("<div class='dot' style='background:#e74c3c;'></div>" if h_name else "")
         dots += "".join([f"<div class='dot' style='background:{df_users[df_users['name']==u]['color'].values[0] if u in df_users['name'].values else '#3498db'};'></div>" for u in u_evs["user"].unique()])
-        return f"<div style='text-align:center; {style}'>{d_obj.day}<div class='dot-container'>{dots}</div></div>"
+        return f"<div style='text-align:center; {f_style}'>{d_obj.day}<div class='dot-container'>{dots}</div></div>"
     
-    # MONAT-ANSICHT
     html = f"<div style='border:1px solid {border_color}; border-top: 4px solid {border_color}; background-color:{bg}; background-image: linear-gradient({ferien_bg}, {ferien_bg}); padding:5px; min-height:85px; border-radius:5px;'>"
     html += f"<div style='display:flex; justify-content:space-between; align-items:center;'><b style='font-size:14px;'>{d_obj.day}</b>"
-    
-    if is_f:
-        html += f"<span style='background:#f1c40f; color:black; font-size:9px; font-weight:bold; padding:1px 4px; border-radius:3px;'>{f_name}</span>"
-    
+    if is_f: html += f"<span style='background:#f1c40f; color:black; font-size:9px; font-weight:bold; padding:1px 4px; border-radius:3px;'>{f_name}</span>"
     html += "</div>"
     
-    if h_name:
-        html += f"<div style='background:#e74c3c; color:white; padding:2px; font-size:10px; border-radius:3px; margin-top:2px;'>{h_name}</div>"
-    
+    if h_name: html += f"<div style='background:#e74c3c; color:white; padding:2px; font-size:10px; border-radius:3px; margin-top:2px;'>{h_name}</div>"
     for _, r in u_evs.iterrows():
         c = df_users[df_users["name"]==r['user']]["color"].values[0] if r['user'] in df_users["name"].values else "#555"
         html += f"<div style='background:{c}; color:white; padding:2px; margin-top:3px; font-size:11px; font-weight:bold; border-radius:3px; text-align:center;'>{r['title']}</div>"
-    
-    html += "</div>"
-    return html
+    return html + "</div>"
 
 # --- 6. NAVIGATION & CRUD ---
 st.title(f"📅 Team-Kalender {selected_year}")
@@ -182,7 +177,7 @@ with c2.expander("✏️ Bearbeiten"):
 
 with c3.expander("🗑️ Löschen"):
     if display_options:
-        idx_d = st.selectbox("Block wählen", range(len(display_options)), format_func=lambda x: display_options[x], key="del")
+        idx_d = st.selectbox("Block wählen", range(len(display_options)), format_func=lambda x: display_options[x], key="del_ev")
         if st.button("Löschen", type="primary"):
             rd = ref_data[idx_d]
             mask = (df_events["title"] == rd["title"]) & (df_events["user"] == rd["user"]) & (pd.to_datetime(df_events["date"]).dt.date >= rd["start"]) & (pd.to_datetime(df_events["date"]).dt.date <= rd["end"])
@@ -221,8 +216,7 @@ else: # LISTE
     if show_ferien and ferien_daten:
         for f in ferien_daten:
             try:
-                s_f = datetime.strptime(f["start"][:10], "%Y-%m-%d").date()
-                e_f = datetime.strptime(f["end"][:10], "%Y-%m-%d").date()
+                s_f, e_f = datetime.strptime(f["start"][:10], "%Y-%m-%d").date(), datetime.strptime(f["end"][:10], "%Y-%m-%d").date()
                 l_items.append({"d": s_f, "t": f["name"].split(" ")[0].capitalize(), "u": "Ferien", "type": "fer", "info": f"{s_f.strftime('%d.%m.')}-{e_f.strftime('%d.%m.')}"})
             except: continue
     for item in sorted(l_items, key=lambda x: x["d"]):
@@ -234,37 +228,30 @@ else: # LISTE
 # --- 8. NUTZER VERWALTUNG ---
 st.sidebar.markdown("---")
 with st.sidebar.expander("👤 Nutzer verwalten"):
-    t1, t2, t3 = st.tabs(["Neu", "Bearbeiten", "Löschen"])
-    
+    t1, t2, t3 = st.tabs(["Neu", "Farbe", "Löschen"])
     with t1:
-        nu = st.text_input("Name", key="nu_input").strip()
-        nc = st.color_picker("Farbe", "#3498db", key="nc_input")
+        nu = st.text_input("Name", key="nu_new").strip()
+        nc = st.color_picker("Farbe", "#3498db", key="nc_new")
         if st.button("Hinzufügen"):
             if nu:
-                existing_names = [name.lower() for name in df_users["name"].tolist()]
-                if nu.lower() in existing_names:
-                    st.error(f"Nutzer '{nu}' existiert bereits!")
+                if nu.lower() in [n.lower() for n in df_users["name"].tolist()]: st.error("Existiert bereits!")
                 else:
-                    new_user = pd.DataFrame([{"name": nu, "color": nc}])
-                    df_users = pd.concat([df_users, new_user], ignore_index=True)
+                    df_users = pd.concat([df_users, pd.DataFrame([{"name": nu, "color": nc}])], ignore_index=True)
                     conn.update(spreadsheet=URL, worksheet="users", data=df_users)
-                    st.cache_data.clear(); st.success(f"{nu} wurde angelegt."); st.rerun()
-            else: st.warning("Bitte einen Namen eingeben.")
-
+                    st.cache_data.clear(); st.rerun()
     with t2:
         if not df_users.empty:
-            u_e = st.selectbox("Nutzer wählen", df_users["name"].tolist(), key="ue_select")
+            u_e = st.selectbox("Nutzer", df_users["name"].tolist(), key="u_edit")
             idx = df_users[df_users["name"] == u_e].index[0]
-            new_c = st.color_picker("Neue Farbe", df_users.at[idx, "color"], key="nec_picker")
+            new_c = st.color_picker("Farbe", df_users.at[idx, "color"], key="c_edit")
             if st.button("Aktualisieren"):
                 df_users.at[idx, "color"] = new_c
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
                 st.cache_data.clear(); st.rerun()
-
     with t3:
         if not df_users.empty:
-            u_d = st.selectbox("Löschen", df_users["name"].tolist(), key="du_select")
-            if st.button("Benutzer unwiderruflich löschen", type="primary"):
+            u_d = st.selectbox("Löschen", df_users["name"].tolist(), key="u_del")
+            if st.button("Unwiderruflich Löschen", type="primary"):
                 df_users = df_users[df_users["name"] != u_d]
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
                 st.cache_data.clear(); st.rerun()
