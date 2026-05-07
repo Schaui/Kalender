@@ -55,7 +55,7 @@ df_users, df_events = load_data()
 
 # --- 4. SIDEBAR ---
 st.sidebar.title("⚙️ Einstellungen")
-if st.sidebar.button("🔄 Daten & Cache neu laden"):
+if st.sidebar.button("🔄 Neu laden"):
     st.cache_data.clear()
     st.rerun()
 
