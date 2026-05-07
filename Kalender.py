@@ -23,7 +23,7 @@ MONATS_NAMEN = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "A
 WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 LAND_CODE = "SH" 
 
-# Wochenstart für Logik auf Montag setzen
+# Wochenstart für die Kalender-Logik auf Montag (0) setzen
 calendar.setfirstweekday(calendar.MONDAY)
 
 # --- DATEN-LOGIK ---
@@ -76,7 +76,7 @@ st.sidebar.markdown("---")
 visible_users = [row['name'] for _, row in df_users.iterrows() if st.sidebar.checkbox(row['name'], value=True, key=f"f_{row['name']}")] if not df_users.empty else []
 df_ev_filt = df_events[df_events["user"].isin(visible_users)] if not df_events.empty else df_events
 
-# --- KALENDER RENDERING ---
+# --- KALENDER & FERIEN RENDERING ---
 de_hols = holidays.Germany(subdiv=LAND_CODE, years=selected_year)
 ferien_daten = get_ferien(LAND_CODE, selected_year)
 
@@ -85,14 +85,14 @@ def is_ferien(d):
         try:
             s_f = datetime.strptime(f["start"][:10], "%Y-%m-%d").date()
             e_f = datetime.strptime(f["end"][:10], "%Y-%m-%d").date()
-            if s_f <= d <= e_f: return True, f["name"].split(" ")[0].capitalize()
+            if s_f <= d <= e_f: 
+                return True, f["name"].split(" ")[0].capitalize()
         except: continue
     return False, ""
 
 def render_day(d_obj, compact=False):
     h_name = de_hols.get(d_obj) if show_hols else None
     in_f, f_n = is_ferien(d_obj)
-    # Ferien nur anzeigen, wenn Filter aktiv
     display_f = in_f if show_ferien else False
     
     u_evs = df_ev_filt[df_ev_filt["date"] == str(d_obj)] if not df_ev_filt.empty else pd.DataFrame()
@@ -114,7 +114,7 @@ def render_day(d_obj, compact=False):
         html += f"<div style='background:{c}; color:white; padding:3px; margin-top:3px; font-size:12px; font-weight:bold; border-radius:3px; line-height:1.2; text-align:center;'>{r['title']}</div>"
     return html + "</div>"
 
-# --- MANAGEMENT ---
+# --- MANAGEMENT BEREICH ---
 st.title(f"📅 Team-Kalender {selected_year}")
 c1, c2, c3 = st.columns(3)
 display_options, ref_data = get_grouped_event_list(df_events)
@@ -178,7 +178,7 @@ elif view_mode == "Jahr":
                     for i, day in enumerate(week):
                         if day != 0: d_cols[i].markdown(render_day(date(selected_year, m, day), True), unsafe_allow_html=True)
 
-else: # Liste
+else: # LISTE (MIT FIX FÜR FERIENNAMEN & FILTER)
     st.subheader("📋 Übersicht")
     l_items = []
     
@@ -187,18 +187,19 @@ else: # Liste
     for r in refs: 
         l_items.append({"d": r["start"], "t": r["title"], "u": r["user"], "type": "ev", "info": f"{r['start'].strftime('%d.%m.')} - {r['end'].strftime('%d.%m.')}" if r['start']!=r['end'] else ""})
     
-    # 2. Feiertage (Filter berücksichtigen)
+    # 2. Feiertage
     if show_hols:
         for d, n in de_hols.items():
             if d.year == selected_year: l_items.append({"d": d, "t": n, "u": "Feiertag", "type": "hol", "info": ""})
             
-    # 3. Ferien (Filter berücksichtigen)
+    # 3. Ferien (Bereinigter Name!)
     if show_ferien:
         for f in ferien_daten:
             try:
                 s_f = datetime.strptime(f["start"][:10], "%Y-%m-%d").date()
                 e_f = datetime.strptime(f["end"][:10], "%Y-%m-%d").date()
-                l_items.append({"d": s_f, "t": f["name"], "u": "Ferien", "type": "fer", "info": f"{s_f.strftime('%d.%m.')} - {e_f.strftime('%d.%m.')}"})
+                clean_name = f["name"].split(" ")[0].capitalize() 
+                l_items.append({"d": s_f, "t": clean_name, "u": "Ferien", "type": "fer", "info": f"{s_f.strftime('%d.%m.')} - {e_f.strftime('%d.%m.')}"})
             except: continue
 
     # Sortieren und Anzeigen
