@@ -107,16 +107,15 @@ def render_day(d_obj, compact=False):
         dots += "".join([f"<div class='dot' style='background:{df_users[df_users['name']==u]['color'].values[0] if u in df_users['name'].values else '#3498db'};'></div>" for u in u_evs["user"].unique()])
         return f"<div style='text-align:center; {style}'>{d_obj.day}<div class='dot-container'>{dots}</div></div>"
     
-    # MONAT-ANSICHT
-    html = f"""
-    <div style="border:1px solid {border_color}; border-top: 4px solid {border_color}; 
-                background:{bg}; background-color:{ferien_bg}; 
-                padding:5px; min-height:85px; border-radius:5px;">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <b style="font-size:14px;">{d_obj.day}</b>
-            {"<span style='color:#f1c40f; font-size:9px; font-weight:bold;'>"+f_name+"</span>" if is_f else ""}
-        </div>
-    """
+    # MONAT-ANSICHT (Hier lag der Fehler mit dem extra </div>)
+    html = f"<div style='border:1px solid {border_color}; border-top: 4px solid {border_color}; background:{bg}; background-color:{ferien_bg}; padding:5px; min-height:85px; border-radius:5px;'>"
+    html += f"<div style='display:flex; justify-content:space-between; align-items:center;'><b style='font-size:14px;'>{d_obj.day}</b>"
+    
+    if is_f:
+        html += f"<span style='color:#f1c40f; font-size:9px; font-weight:bold;'>{f_name}</span>"
+    
+    html += "</div>" # Ende Header-Zeile (Zahl & Ferienname)
+    
     if h_name:
         html += f"<div style='background:#e74c3c; color:white; padding:2px; font-size:10px; border-radius:3px; margin-top:2px;'>{h_name}</div>"
     
@@ -124,7 +123,8 @@ def render_day(d_obj, compact=False):
         c = df_users[df_users["name"]==r['user']]["color"].values[0] if r['user'] in df_users["name"].values else "#555"
         html += f"<div style='background:{c}; color:white; padding:2px; margin-top:3px; font-size:11px; font-weight:bold; border-radius:3px; text-align:center;'>{r['title']}</div>"
     
-    return html + "</div>"
+    html += "</div>" # Das finale schließende Tag für den gesamten Tag-Container
+    return html
 
 # --- 6. NAVIGATION & CRUD (BLEIBT GLEICH) ---
 st.title(f"📅 Team-Kalender {selected_year}")
