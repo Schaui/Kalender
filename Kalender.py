@@ -115,6 +115,13 @@ def render_day(d_obj, compact=False):
     return html + "</div>"
 
 # --- MANAGEMENT BEREICH ---
+
+# LOGO ZENTRIERUNG
+col_l1, col_l2, col_l3 = st.columns([1, 1, 1])
+with col_l2:
+    # Ersetze die URL durch dein Logo (z.B. "logo.png")
+    st.image("https://gemini.google.com/share/8177571f2c83", use_container_width=True)
+
 st.title(f"📅 Team-Kalender {selected_year}")
 c1, c2, c3 = st.columns(3)
 display_options, ref_data = get_grouped_event_list(df_events)
@@ -178,7 +185,7 @@ elif view_mode == "Jahr":
                     for i, day in enumerate(week):
                         if day != 0: d_cols[i].markdown(render_day(date(selected_year, m, day), True), unsafe_allow_html=True)
 
-else: # LISTE (MIT FIX FÜR FERIENNAMEN & FILTER)
+else: # LISTE
     st.subheader("📋 Übersicht")
     l_items = []
     
@@ -225,7 +232,7 @@ else: # LISTE (MIT FIX FÜR FERIENNAMEN & FILTER)
 # --- NUTZER VERWALTUNG (SIDEBAR) ---
 st.sidebar.markdown("---")
 with st.sidebar.expander("👤 Nutzer verwalten"):
-    tab1, tab2, tab3 = st.tabs(["Neu", "Bearbeiten", "Löschen"])
+    tab1, tab2, tab3 = st.tabs(["Neu", "Farbe", "Löschen"])
     with tab1:
         nu = st.text_input("Name", key="u_n")
         nc = st.color_picker("Farbe", "#3498db", key="u_c")
