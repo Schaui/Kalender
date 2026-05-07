@@ -30,7 +30,7 @@ MONATS_NAMEN = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "A
 WOCHENTAGE = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
 LAND_CODE = "SH" 
 
-# --- DATEN LADEN ---
+# --- DATEN LADEN (MIT REFRESH LOGIK) ---
 @st.cache_data(ttl=3600)
 def get_ferien(land_code, jahr):
     try:
@@ -40,17 +40,22 @@ def get_ferien(land_code, jahr):
     except: return []
 
 def load_data():
+    # Wir nutzen st.cache_data nicht für die Google Sheets Daten selbst, 
+    # oder setzen das TTL extrem niedrig, damit Änderungen sofort greifen.
     try:
-        u = conn.read(spreadsheet=URL, worksheet="users", ttl=5)
-    except: u = pd.DataFrame(columns=["name", "color"])
-    try:
-        e = conn.read(spreadsheet=URL, worksheet="events", ttl=5)
-    except: e = pd.DataFrame(columns=["title", "date", "user"])
+        # ttl=0 erzwingt das Neuladen bei jedem Funktionsaufruf nach einem Rerun
+        u = conn.read(spreadsheet=URL, worksheet="users", ttl=0)
+        e = conn.read(spreadsheet=URL, worksheet="events", ttl=0)
+    except Exception as ex:
+        st.error(f"Fehler beim Laden der Daten: {ex}")
+        u = pd.DataFrame(columns=["name", "color"])
+        e = pd.DataFrame(columns=["title", "date", "user"])
     
     if u.empty: u = pd.DataFrame(columns=["name", "color"])
     if e.empty: e = pd.DataFrame(columns=["title", "date", "user"])
     return u, e
 
+# Daten initial laden
 df_users, df_events = load_data()
 
 # --- SIDEBAR EINSTELLUNGEN ---
@@ -77,6 +82,7 @@ if "name" in df_users.columns and not df_users.empty:
         if st.sidebar.checkbox(f"{user_row['name']}", value=True, key=f"filter_{user_row['name']}"):
             visible_users.append(user_row['name'])
 
+# Filterung der Events für die Anzeige
 df_events_filtered = df_events[df_events["user"].isin(visible_users)] if not df_events.empty and "user" in df_events.columns else df_events
 
 # --- LOGIK: FEIERTAGS & FERIEN ---
@@ -141,9 +147,10 @@ with c1.expander("➕ Neuer Eintrag"):
                     while curr <= d_end:
                         new_data.append({"title": t, "date": str(curr), "user": u})
                         curr += timedelta(days=1)
+                    # Update & Cache-Clear über st.rerun
                     df_events = pd.concat([df_events, pd.DataFrame(new_data)], ignore_index=True)
                     conn.update(spreadsheet=URL, worksheet="events", data=df_events)
-                    st.success("Erfolgreich gespeichert!")
+                    st.cache_data.clear() # Leert alle Caches für sofortigen Refresh
                     st.rerun()
 
 with c2.expander("✏️ Bearbeiten"):
@@ -163,6 +170,7 @@ with c2.expander("✏️ Bearbeiten"):
                     mask = (df_events["title"] == df_events.at[idx, "title"]) & (df_events["user"] == df_events.at[idx, "user"])
                     df_events.loc[mask, "title"], df_events.loc[mask, "user"] = et, eu
                 conn.update(spreadsheet=URL, worksheet="events", data=df_events)
+                st.cache_data.clear()
                 st.rerun()
 
 with c3.expander("🗑️ Löschen"):
@@ -175,9 +183,11 @@ with c3.expander("🗑️ Löschen"):
             if mode_del == "Nur diesen Tag": df_events = df_events.drop(idx_del)
             else: df_events = df_events[~((df_events["title"] == df_events.at[idx_del, "title"]) & (df_events["user"] == df_events.at[idx_del, "user"]))]
             conn.update(spreadsheet=URL, worksheet="events", data=df_events)
+            st.cache_data.clear()
             st.rerun()
 
 # --- ANSICHTEN ---
+# (Hier bleibt die Logik wie gehabt, greift aber jetzt auf die frisch geladenen Daten zu)
 if view_mode == "Monat":
     cols = st.columns(7)
     for i, d in enumerate(WOCHENTAGE): cols[i].write(f"**{d}**")
@@ -237,7 +247,7 @@ else: # Liste
 # --- BENUTZER VERWALTUNG (SIDEBAR) ---
 st.sidebar.markdown("---")
 with st.sidebar.expander("👤 Nutzer verwalten"):
-    tab1, tab2, tab3 = st.tabs(["Neu", "Bearbeiten", "Löschen"])
+    tab1, tab2, tab3 = st.tabs(["Neu", "Farbe", "Löschen"])
     with tab1:
         nu = st.text_input("Name", key="new_u_name")
         nc = st.color_picker("Farbe", "#3498db", key="new_u_color")
@@ -245,15 +255,17 @@ with st.sidebar.expander("👤 Nutzer verwalten"):
             if nu:
                 df_users = pd.concat([df_users, pd.DataFrame([{"name": nu, "color": nc}])], ignore_index=True)
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
+                st.cache_data.clear()
                 st.rerun()
     with tab2:
         if not df_users.empty:
             edit_u = st.selectbox("Nutzer wählen", df_users["name"].tolist(), key="edit_u_sel")
             u_idx = df_users[df_users["name"] == edit_u].index[0]
             new_c_val = st.color_picker("Neue Farbe", df_users.at[u_idx, "color"], key="edit_u_color")
-            if st.button("Aktualisieren"):
+            if st.button("Farbe aktualisieren"):
                 df_users.at[u_idx, "color"] = new_c_val
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
+                st.cache_data.clear()
                 st.rerun()
     with tab3:
         if not df_users.empty:
@@ -261,4 +273,5 @@ with st.sidebar.expander("👤 Nutzer verwalten"):
             if st.button("Entfernen"):
                 df_users = df_users[df_users["name"] != del_u]
                 conn.update(spreadsheet=URL, worksheet="users", data=df_users)
+                st.cache_data.clear()
                 st.rerun()
